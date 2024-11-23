@@ -8,7 +8,7 @@ import rlio_rollout_stoage
 import rlio_data_converter
 import rlio_rollout_stoage
 
-import pointnet2
+import pointnet1
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -90,7 +90,7 @@ class RLIO_TD3_BC(object):
 		self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=3e-4)
 
 		# self.pointnet = pointnet2.PointNet2Encoder(num_class=state_dim, normal_channel=True).to(device)
-		self.pointnet = pointnet2.PointNet2Encoder(num_class=state_dim, normal_channel=False).to(device)
+		self.pointnet = pointnet1.PointNet_RLIO(k=state_dim, normal_channel=False).to(device)
 
 
 		self.max_action = max_action
@@ -131,19 +131,12 @@ class RLIO_TD3_BC(object):
 
 		for points, next_points, errors, actions, dones in generator:
 
-			print("total it : ", self.total_it)
-
-			state = self.pointnet(points)
-			next_state = self.pointnet(next_points).detach()
+			state, _ = self.pointnet(points) # global feature & feature transform matrix(auxiliary)
+			next_state, _ = self.pointnet(next_points) # global feature & feature transform matrix(auxiliary)
 
 			reward = - errors	# TODO: Scaling
 			not_done = ~dones
 
-			print("state shape : ", state.shape)
-			print("next state shape : ", next_state.shape)
-			print("reward shape : ", reward.shape)
-			print("not done shape : ", not_done.shape)
-			
 			with torch.no_grad():
 				# Select action according to policy and add clipped noise
 				noise = (
@@ -160,7 +153,7 @@ class RLIO_TD3_BC(object):
 				target_Q = reward + not_done * self.discount * target_Q
 
 			# Get current Q estimates
-			current_Q1, current_Q2 = self.critic(state, actions)
+			current_Q1, current_Q2 = self.critic(state.detach(), actions)  # detach() state to avoid updating pointnet twice
 
 			# Compute critic loss
 			critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q)

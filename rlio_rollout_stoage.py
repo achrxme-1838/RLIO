@@ -22,10 +22,13 @@ class RLIORolloutStorage:
     def reset_batches(self):
         self.current_batch_idx = 0
 
-        self.points_batch = torch.zeros(self.max_batch_size, 3, self.num_points, device=self.device)
-        self.next_points_batch = torch.zeros(self.max_batch_size, 3, self.num_points, device=self.device)
+        self.points_batch = torch.zeros(self.max_batch_size, 3, self.num_points, dtype=torch.float32, device=self.device, requires_grad=False)
+        self.next_points_batch = torch.zeros(self.max_batch_size, 3, self.num_points, dtype=torch.float32, device=self.device, requires_grad=False)
+        
+        self.rewards_batch = torch.zeros(self.max_batch_size, dtype=torch.float32, device=self.device, requires_grad=False)
+        self.params_batch = torch.zeros(self.max_batch_size, 4, dtype=torch.float32, device=self.device, requires_grad=False)
+        self.dones_batch = torch.zeros(self.max_batch_size, dtype=torch.bool, device=self.device, requires_grad=False)
 
-        self.rewards_batch = torch.zeros(self.max_batch_size, device=self.device)
 
     def add_new_trajs_to_buffer(self, points, next_points, rewards, params, dones):
         """

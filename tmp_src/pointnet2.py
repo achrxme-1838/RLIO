@@ -2,6 +2,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from pointnet2_utils import PointNetSetAbstractionMsg, PointNetSetAbstraction
 
+import torch
 # pointnet2_cls_msg
 
 class PointNet2Encoder(nn.Module):

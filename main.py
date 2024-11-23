@@ -65,13 +65,14 @@ def main():
 	policy = RLIO_TD3_BC.RLIO_TD3_BC(**kwargs)
 	policy.init_storage_and_converter(max_batch_size, mini_batch_size, num_epochs, num_trajs, num_points_per_scan)
 
+	print(f"Total GPU memory allocated at init : {torch.cuda.memory_allocated() / (1024**2):.2f} MB")
 
 	for t in range(int(max_timesteps)):
 		print(f"Step: {t}")
 
 		policy.rollout_storage.reset_batches()
 		policy.data_converter.preprocess_trajectory()
-		
+
 		policy.train()
 
 if __name__ == "__main__":
