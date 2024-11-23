@@ -79,6 +79,8 @@ class RLIO_TD3_BC(object):
 		noise_clip=0.5,
 		policy_freq=2,
 		alpha=2.5,
+		learning_rate=3e-4,
+
 	):
 
 		self.actor = Actor(state_dim, action_dim, max_action).to(device)
@@ -123,18 +125,31 @@ class RLIO_TD3_BC(object):
 	def process_trajectory(self):
 		self.data_converter.preprocess_trajectory()
 
+	def evaluate(self):
+		"""
+		1. select 1 trajectory, T times
+		2. deploy the policy -> discrtize the action space
+		3. calculate the error
+		"""
+		pass
+
 
 	def train(self):
 		self.total_it += 1
 
+		mean_reward = 0
+		mean_actor_loss = 0
+		mean_critic_loss = 0
+
+		num_update = 0
+
 		generator= self.rollout_storage.mini_batch_generator()
 
-		for points, next_points, errors, actions, dones in generator:
+		for points, next_points, reward, actions, dones in generator:
 
 			state, _ = self.pointnet(points) # global feature & feature transform matrix(auxiliary)
 			next_state, _ = self.pointnet(next_points) # global feature & feature transform matrix(auxiliary)
 
-			reward = - errors	# TODO: Scaling
 			not_done = ~dones
 
 			with torch.no_grad():
@@ -185,6 +200,27 @@ class RLIO_TD3_BC(object):
 				for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
 					target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
+			else:
+				actor_loss = torch.tensor(0.0)
+
+			mean_reward += reward.mean().item()
+			mean_actor_loss += actor_loss.mean().item()
+			mean_critic_loss += critic_loss.mean().item()
+			num_update += 1
+
+			# self.log(reward.mean().item(), actor_loss.mean().item(), critic_loss.mean().item())
+
+		mean_actor_loss /= num_update
+		mean_critic_loss /= num_update
+		mean_reward /= num_update
+
+		return mean_reward, mean_actor_loss, mean_critic_loss
+
+		# self.log(mean_reward, mean_actor_loss, mean_critic_loss)
+
+
+	def log(self, reward, actor_loss, critic_loss):
+		print(reward, actor_loss, critic_loss)
 
 	def save(self, filename):
 		torch.save(self.critic.state_dict(), filename + "_critic")

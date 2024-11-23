@@ -181,7 +181,7 @@ class RLIODataConverter:
         sampled_traj_name_pairs = self.random_select_trajectory()
         for exp_dir, sub_dir in sampled_traj_name_pairs:
 
-            print(f"Processing: {exp_dir}/{sub_dir}")
+            # print(f"Processing: {exp_dir}/{sub_dir}")
 
             selected_indices, errors = self.preprocess_errors(exp_dir, sub_dir)
             

@@ -36,7 +36,6 @@ class RLIORolloutStorage:
         rewards: (#frames, 6)
         """
         num_frames, _, num_points = points.shape # (#frames, 3, 1024)
-        print(num_points, num_frames)
         assert num_points == self.num_points     # 1024
 
         if self.current_batch_idx + num_frames > self.max_batch_size:
@@ -55,11 +54,6 @@ class RLIORolloutStorage:
         Generate mini-batches for training.
         """
         self.num_mini_batches = self.current_batch_idx // self.mini_batch_size
-
-        print("====================================")
-        print(self.current_batch_idx)
-        print(self.num_mini_batches)
-        print(self.mini_batch_size)
 
         valid_point_batch = self.points_batch[:self.current_batch_idx].detach()
         valid_next_point_batch = self.next_points_batch[:self.current_batch_idx].detach()
