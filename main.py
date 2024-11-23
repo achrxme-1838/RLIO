@@ -10,8 +10,7 @@ import wandb
 import time
 
 
-#TODO: wandb sweep, model save
-
+wandb.login()
 
 # import rollout_storage as rs
 
@@ -19,6 +18,19 @@ def main():
 	"""
 	RLIO all-LIO : RL LIO, the all things need to tune the LIO
 	"""
+
+	if WANDB:
+		wandb.init(project="rlio")
+
+		if WANDB_SWEEP:
+			# run_name = f"lr_{wandb.config.learning_rate}_alpha_{wandb.config.alpha}_noise_{wandb.config.policy_noise}"
+			# run_name = f"lr_{wandb.config.learning_rate:.5f}"
+			run_name = f"lr_{wandb.config.learning_rate:.5f}_state_dim_{wandb.config.state_dim}_tau_{wandb.config.tau}_alpha_{wandb.config.alpha}"
+		else:
+			run_name = "default_run"
+
+		wandb.run.name = run_name
+		wandb.run.save()
 
 	save_model = True
 	save_interval = 200
@@ -36,7 +48,6 @@ def main():
 	num_epochs = 4 # 4
 	mini_batch_size = 256 # 64 # 512
 
-
 	# TD3
 	discount = 0.99
 	tau = 0.005               
@@ -51,6 +62,12 @@ def main():
 	max_batch_size = 6000 #3000 for 4 trajs
 
 	learning_rate = 3e-4 # 3e-4
+
+	if WANDB_SWEEP:
+		learning_rate = wandb.config.learning_rate
+		state_dim = wandb.config.state_dim
+		tau = wandb.config.tau
+		alpha = wandb.config.alpha	
 
 	add_critic_pointnet = False
 
@@ -87,6 +104,10 @@ def main():
 
 		mean_reward, mean_actor_loss, mean_critic_loss, mean_target_Q, mean_Q_error = policy.train(add_critic_pointnet)
 
+		if WANDB_SWEEP:
+			score =  objective(mean_target_Q)
+			log_wandb(locals(), score)
+
 		stop = time.time()
 		preprocess_time = preprocess_stop - start
 		train_time = stop - preprocess_stop
@@ -109,7 +130,7 @@ def save(model, filename):
 	torch.save(model.state_dict(), filename)
 
 
-def log_wandb(locs):
+def log_wandb(locs, score=None):
 	wandb_dict = {}
 	wandb_dict['Loss/mean_reward'] = locs["mean_reward"]
 	wandb_dict['Loss/mean_actor_loss'] = locs["mean_actor_loss"]
@@ -120,12 +141,67 @@ def log_wandb(locs):
 	wandb_dict['Performance/preprocess_time'] = locs["preprocess_time"]
 	wandb_dict['Performance/train_time'] = locs["train_time"]
 
+	if score is not None:
+		wandb_dict['score'] = score
+
 	wandb.log(wandb_dict, step=locs['it'])
 
-WANDB = False
+	
+
+WANDB = True
+WANDB_SWEEP = True
+
+
+def objective(mean_target_Q):
+    # score = config.x**3 + config.y
+	# score = config.mean_target_Q
+	return mean_target_Q
+
 
 if __name__ == "__main__":
-	if WANDB:
-		wandb.init(project="rlio")
 
-	main()
+	if WANDB_SWEEP:
+		
+		sweep_configuration = {
+			"method": "random",
+			"metric": {"goal": "maximize", "name": "score"},
+			"parameters": {
+				"learning_rate": {"max:": 1e-3, "min": 1e-5},
+				"state_dim": {"value": [32, 64, 128]},
+				"tau": {"max":0.1, "min":0.0001},
+				"alpha": {"max": 10, "min": 0.25},
+			}
+		}
+
+
+		# state_dim = 64 # Dim Pointnet output
+		# action_dim = 4 # num params to tune
+
+		# # Training related
+		# max_timesteps = 10#00
+		# num_trajs = 4
+		# num_epochs = 4 # 4
+		# mini_batch_size = 256 # 64 # 512
+
+		# # TD3
+		# discount = 0.99
+		# tau = 0.005               
+		# policy_noise = 0.2
+		# noise_clip = 0.5        
+		# policy_freq = 2 
+		# # TD3 + BC
+		# alpha = 2.5
+
+		# # Batch size related
+		# num_points_per_scan= 5 #12 # 512  # 1024
+		# max_batch_size = 6000 #3000 for 4 trajs
+
+		# learning_rate = 3e-4 # 3e-4
+
+		sweep_id = wandb.sweep(sweep=sweep_configuration, project="rlio_sweep")
+		# score = objective(wandb.config)
+
+		wandb.agent(sweep_id, function=main, count=10)
+
+	else:
+		main()
