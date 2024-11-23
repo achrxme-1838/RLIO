@@ -30,8 +30,8 @@ class Actor(nn.Module):
 		self.l3 = nn.Linear(256, action_dim)
 
 		# Define action range min and max for each action dimension
-		self.action_min = torch.tensor([0.25, 3.0, 0.25, 0.005])
-		self.action_max = torch.tensor([1.0, 5.0, 1.0, 0.1])
+		self.action_min = torch.tensor([0.25, 3.0, 0.25, 0.005], device=device)
+		self.action_max = torch.tensor([1.0, 5.0, 1.0, 0.1], device=device)
 		
 	def forward(self, state):
 		a = F.relu(self.l1(state))
