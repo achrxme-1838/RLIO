@@ -175,7 +175,10 @@ class RLIODataConverter:
         return np.array(params)
 
     def calculate_reward(self, errors):
-        return -errors
+        coef = 50.0 #100.0
+
+        # print((1-coef*errors).mean())
+        return 1-coef*errors
 
     def preprocess_trajectory(self):
         sampled_traj_name_pairs = self.random_select_trajectory()
@@ -194,7 +197,6 @@ class RLIODataConverter:
 
             valid_errors = self.delete_invalid_errors(errors, valid_indices)
             rewards = self.calculate_reward(valid_errors)
-
             
             self.rollout_storage.add_new_trajs_to_buffer(processed_points, processed_next_points, rewards, params, dones)
 

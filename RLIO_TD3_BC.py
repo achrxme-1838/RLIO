@@ -103,6 +103,8 @@ class RLIO_TD3_BC(object):
 
 		# self.pointnet = pointnet2.PointNet2Encoder(num_class=state_dim, normal_channel=True).to(device)
 		self.pointnet = pointnet1.PointNet_RLIO(k=state_dim, normal_channel=False).to(device)
+		self.critic_pointnet = pointnet1.PointNet_RLIO(k=state_dim, normal_channel=False).to(device)
+
 
 
 		# self.max_action = max_action
@@ -136,7 +138,7 @@ class RLIO_TD3_BC(object):
 		self.data_converter.preprocess_trajectory()
 
 
-	def train(self):
+	def train(self, add_critic_pointnet):
 		self.total_it += 1
 
 		mean_reward = 0
@@ -174,7 +176,12 @@ class RLIO_TD3_BC(object):
 
 
 			# Get current Q estimates
-			current_Q1, current_Q2 = self.critic(state.detach(), actions)  # detach() state to avoid updating pointnet twice
+
+			if add_critic_pointnet:
+				critic_state, _ = self.critic_pointnet(points.detach())
+				current_Q1, current_Q2 = self.critic(critic_state, actions)
+			else:
+				current_Q1, current_Q2 = self.critic(state.detach(), actions)  # detach() state to avoid updating pointnet twice
 
 			mean_Q_error += (current_Q1 - target_Q).abs().mean().item()
 			mean_Q_error += (current_Q2 - target_Q).abs().mean().item()
@@ -193,12 +200,12 @@ class RLIO_TD3_BC(object):
 				# Compute actor loss
 				pi = self.actor(state)
 
-				print(pi[0])
+				# print(pi[0])
 
 				Q = self.critic.Q1(state, pi)
 				lmbda = self.alpha/Q.abs().mean().detach()
 
-				actor_loss = -lmbda * Q.mean() + F.mse_loss(pi, actions)
+				actor_loss = -lmbda * Q.mean() + F.mse_loss(pi, actions)  # Maximize current Q value
 				
 				# Optimize the actor 
 				self.actor_optimizer.zero_grad()
