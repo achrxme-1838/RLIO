@@ -31,11 +31,10 @@ def main():
 	action_dim = 4 # num params to tune
 
 	# Training related
-	max_timesteps = 10000
-	num_trajs = 8 #4
-	num_epochs = 4
+	max_timesteps = 1000
+	num_trajs = 4
+	num_epochs = 4 # 4
 	mini_batch_size = 256 # 64 # 512
-	# mini_batch_size = 16 # 128 # 256
 
 
 	# TD3
@@ -48,7 +47,7 @@ def main():
 	alpha = 2.5
 
 	# Batch size related
-	num_points_per_scan= 10 #512  # 1024
+	num_points_per_scan= 512 # 512  # 1024
 	max_batch_size = 6000 #3000 for 4 trajs
 
 	learning_rate = 3e-4 # 3e-4
@@ -93,7 +92,7 @@ def main():
 		train_time = stop - preprocess_stop
 
 		total_time = stop - start
-		print(f"it : {it} total_time : {total_time}s")
+		print(f"it : {it} total_time : {total_time}s, pre_time : {preprocess_time}s, train_time : {train_time}s")
 		if WANDB:
 			log_wandb(locals())
 
@@ -123,7 +122,7 @@ def log_wandb(locs):
 
 	wandb.log(wandb_dict, step=locs['it'])
 
-WANDB = True
+WANDB = False
 
 if __name__ == "__main__":
 	if WANDB:
