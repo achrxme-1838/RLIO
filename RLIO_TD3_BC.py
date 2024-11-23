@@ -125,14 +125,6 @@ class RLIO_TD3_BC(object):
 	def process_trajectory(self):
 		self.data_converter.preprocess_trajectory()
 
-	def evaluate(self):
-		"""
-		1. select 1 trajectory, T times
-		2. deploy the policy -> discrtize the action space
-		3. calculate the error
-		"""
-		pass
-
 
 	def train(self):
 		self.total_it += 1
@@ -140,6 +132,9 @@ class RLIO_TD3_BC(object):
 		mean_reward = 0
 		mean_actor_loss = 0
 		mean_critic_loss = 0
+
+		mean_target_Q = 0
+		mean_Q_error = 0
 
 		num_update = 0
 
@@ -167,8 +162,14 @@ class RLIO_TD3_BC(object):
 				target_Q = torch.min(target_Q1, target_Q2)
 				target_Q = reward + not_done * self.discount * target_Q
 
+				mean_target_Q += target_Q.mean().item()
+
+
 			# Get current Q estimates
 			current_Q1, current_Q2 = self.critic(state.detach(), actions)  # detach() state to avoid updating pointnet twice
+
+			mean_Q_error += (current_Q1 - target_Q).abs().mean().item()
+			mean_Q_error += (current_Q2 - target_Q).abs().mean().item()
 
 			# Compute critic loss
 			critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q)
@@ -186,7 +187,7 @@ class RLIO_TD3_BC(object):
 				Q = self.critic.Q1(state, pi)
 				lmbda = self.alpha/Q.abs().mean().detach()
 
-				actor_loss = -lmbda * Q.mean() + F.mse_loss(pi, actions) 
+				actor_loss = -lmbda * Q.mean() + F.mse_loss(pi, actions)
 				
 				# Optimize the actor 
 				self.actor_optimizer.zero_grad()
@@ -208,15 +209,16 @@ class RLIO_TD3_BC(object):
 			mean_critic_loss += critic_loss.mean().item()
 			num_update += 1
 
-			# self.log(reward.mean().item(), actor_loss.mean().item(), critic_loss.mean().item())
 
 		mean_actor_loss /= num_update
 		mean_critic_loss /= num_update
 		mean_reward /= num_update
 
-		return mean_reward, mean_actor_loss, mean_critic_loss
+		mean_target_Q /= num_update
+		mean_Q_error /= (2*num_update)
 
-		# self.log(mean_reward, mean_actor_loss, mean_critic_loss)
+		return mean_reward, mean_actor_loss, mean_critic_loss, mean_target_Q, mean_Q_error
+
 
 
 	def log(self, reward, actor_loss, critic_loss):

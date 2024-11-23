@@ -75,15 +75,20 @@ def main():
 		policy.rollout_storage.reset_batches()
 		policy.data_converter.preprocess_trajectory()
 
-		mean_reward, mean_actor_loss, mean_critic_loss = policy.train()
+		mean_reward, mean_actor_loss, mean_critic_loss, mean_target_Q, mean_Q_error = policy.train()
 		if WANDB:
 			log_wandb(locals())
+
 
 def log_wandb(locs):
 	wandb_dict = {}
 	wandb_dict['Loss/mean_reward'] = locs["mean_reward"]
 	wandb_dict['Loss/mean_actor_loss'] = locs["mean_actor_loss"]
 	wandb_dict['Loss/mean_critic_loss'] = locs["mean_critic_loss"]
+	wandb_dict['Loss/mean_target_Q'] = locs["mean_target_Q"]
+	wandb_dict['Loss/mean_Q_error'] = locs["mean_Q_error"]
+
+
 
 	wandb.log(wandb_dict, step=locs['it'])
 
