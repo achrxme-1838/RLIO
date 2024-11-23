@@ -21,12 +21,11 @@ def main():
 	max_action = 1.0
 
 	# Training related
-	max_timesteps = 1
-	num_trajs = 10
-	# num_mini_batches = 16
-	num_epochs = 8
-	mini_batch_size = 256 
-
+	max_timesteps = 10
+	num_trajs = 4 #4
+	num_epochs = 4
+	mini_batch_size = 1024 # 256
+	# mini_batch_size = 16 # 128 # 256
 
 
 	# TD3
@@ -41,8 +40,10 @@ def main():
 	# normalize = True
 
 	# Batch size related
-	num_points_per_scan=1024
-	max_batch_size = 10000 # sufficient for 10 trajectories
+	# num_points_per_scan=1024
+	num_points_per_scan=256  # 1024
+
+	max_batch_size = 3000
 
 
 
@@ -67,7 +68,7 @@ def main():
 
 	for t in range(int(max_timesteps)):
 		print(f"Step: {t}")
-		
+
 		policy.rollout_storage.reset_batches()
 		policy.data_converter.preprocess_trajectory()
 		

@@ -4,12 +4,12 @@ from pointnet2_utils import PointNetSetAbstractionMsg, PointNetSetAbstraction
 
 # pointnet2_cls_msg
 
-class pointnet2_encoder(nn.Module):
+class PointNet2Encoder(nn.Module):
     def __init__(self,num_class,normal_channel=True):
-        super(pointnet2_encoder, self).__init__()
+        super(PointNet2Encoder, self).__init__()
         in_channel = 3 if normal_channel else 0
         self.normal_channel = normal_channel
-        self.sa1 = PointNetSetAbstractionMsg(512, [0.1, 0.2, 0.4], [16, 32, 128], in_channel,[[32, 32, 64], [64, 64, 128], [64, 96, 128]])
+        self.sa1 = PointNetSetAbstractionMsg(512, [0.1, 0.2, 0.4], [16, 32, 128], in_channel, [[32, 32, 64], [64, 64, 128], [64, 96, 128]])
         self.sa2 = PointNetSetAbstractionMsg(128, [0.2, 0.4, 0.8], [32, 64, 128], 320,[[64, 64, 128], [128, 128, 256], [128, 128, 256]])
         self.sa3 = PointNetSetAbstraction(None, None, None, 640 + 3, [256, 512, 1024], True)
         self.fc1 = nn.Linear(1024, 512)

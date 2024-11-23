@@ -174,24 +174,29 @@ class RLIODataConverter:
         params = [float(p) for p in params_str]
         return np.array(params)
 
+    def calculate_reward(self, errors):
+        return -errors
 
     def preprocess_trajectory(self):
         sampled_traj_name_pairs = self.random_select_trajectory()
         for exp_dir, sub_dir in sampled_traj_name_pairs:
-            # print(f"Processing: {exp_dir}/{sub_dir}")sss
+
+            print(f"Processing: {exp_dir}/{sub_dir}")
 
             selected_indices, errors = self.preprocess_errors(exp_dir, sub_dir)
             
             params = self.sub_dir_to_param(sub_dir)  # action parameters
 
-            points_in_this_traj, next_points_in_this_traj, valid_indices, dones = self.fixed_num_sample_points(exp_dir, sub_dir, selected_indices, num_points=1024)
+            points_in_this_traj, next_points_in_this_traj, valid_indices, dones = self.fixed_num_sample_points(exp_dir, sub_dir, selected_indices, num_points=self.num_points_per_scan)
 
             processed_points = self.pointnet_preprocess(points_in_this_traj)
             processed_next_points = self.pointnet_preprocess(next_points_in_this_traj)
 
             valid_errors = self.delete_invalid_errors(errors, valid_indices)
+            rewards = self.calculate_reward(valid_errors)
+
             
-            self.rollout_storage.add_new_trajs_to_buffer(processed_points, processed_next_points, valid_errors, params, dones)
+            self.rollout_storage.add_new_trajs_to_buffer(processed_points, processed_next_points, rewards, params, dones)
 
 
 

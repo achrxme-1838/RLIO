@@ -5,9 +5,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import rlio_rollout_stoage
 
-
 import rlio_data_converter
 import rlio_rollout_stoage
+
+import pointnet2
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -88,6 +89,10 @@ class RLIO_TD3_BC(object):
 		self.critic_target = copy.deepcopy(self.critic)
 		self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=3e-4)
 
+		# self.pointnet = pointnet2.PointNet2Encoder(num_class=state_dim, normal_channel=True).to(device)
+		self.pointnet = pointnet2.PointNet2Encoder(num_class=state_dim, normal_channel=False).to(device)
+
+
 		self.max_action = max_action
 		self.discount = discount
 		self.tau = tau
@@ -106,9 +111,10 @@ class RLIO_TD3_BC(object):
 		state = torch.FloatTensor(state.reshape(1, -1)).to(device)
 		return self.actor(state).cpu().data.numpy().flatten()
 	
-	def init_storage_and_converter(self, max_batch_size, mini_batch_size, num_epochs, num_trajs, num_points_per_scan):
+	def init_storage_and_converter(self,max_batch_size, mini_batch_size, num_epochs, num_trajs, num_points_per_scan):
 
-		self.rollout_storage = rlio_rollout_stoage.RLIORolloutStorage(max_batch_size=max_batch_size, num_points=num_points_per_scan)
+		self.rollout_storage = rlio_rollout_stoage.RLIORolloutStorage(max_batch_size=max_batch_size, num_points=num_points_per_scan,
+																	mini_batch_size=mini_batch_size, num_epochs=num_epochs)
 		self.data_converter = rlio_data_converter.RLIODataConverter(self.rollout_storage, num_trajs=num_trajs, num_points_per_scan=num_points_per_scan)
 
 	def reset_batches(self):
@@ -124,12 +130,19 @@ class RLIO_TD3_BC(object):
 		generator= self.rollout_storage.mini_batch_generator()
 
 		for points, next_points, errors, actions, dones in generator:
-			
-			state = points  # TODO: PointEncoder(points)
-			next_state = next_points  # TODO: PointEncoder(next_points)
-			reward = - errors	# TODO: Scaling
 
+			print("total it : ", self.total_it)
+
+			state = self.pointnet(points)
+			next_state = self.pointnet(next_points).detach()
+
+			reward = - errors	# TODO: Scaling
 			not_done = ~dones
+
+			print("state shape : ", state.shape)
+			print("next state shape : ", next_state.shape)
+			print("reward shape : ", reward.shape)
+			print("not done shape : ", not_done.shape)
 			
 			with torch.no_grad():
 				# Select action according to policy and add clipped noise
