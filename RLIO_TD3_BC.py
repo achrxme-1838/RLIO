@@ -14,20 +14,31 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class Actor(nn.Module):
-	def __init__(self, state_dim, action_dim, max_action):
+	"""
+	action range:
+		0: 0.25~1.0
+		1: 3~5
+		2: 0.25~1.0
+		3: 0.005~0.1
+	"""
+
+	def __init__(self, state_dim, action_dim):
 		super(Actor, self).__init__()
 
 		self.l1 = nn.Linear(state_dim, 256)
 		self.l2 = nn.Linear(256, 256)
 		self.l3 = nn.Linear(256, action_dim)
-		
-		self.max_action = max_action
-		
 
+		# Define action range min and max for each action dimension
+		self.action_min = torch.tensor([0.25, 3.0, 0.25, 0.005])
+		self.action_max = torch.tensor([1.0, 5.0, 1.0, 0.1])
+		
 	def forward(self, state):
 		a = F.relu(self.l1(state))
 		a = F.relu(self.l2(a))
-		return self.max_action * torch.tanh(self.l3(a))
+		a = self.l3(a)
+		action = 0.5 * (a + 1) * (self.action_max - self.action_min) + self.action_min
+		return action
 
 
 class Critic(nn.Module):
@@ -72,7 +83,7 @@ class RLIO_TD3_BC(object):
 		self,
 		state_dim,
 		action_dim,
-		max_action,
+		# max_action,
 		discount=0.99,
 		tau=0.005,
 		policy_noise=0.2,
@@ -80,22 +91,21 @@ class RLIO_TD3_BC(object):
 		policy_freq=2,
 		alpha=2.5,
 		learning_rate=3e-4,
-
 	):
 
-		self.actor = Actor(state_dim, action_dim, max_action).to(device)
+		self.actor = Actor(state_dim, action_dim).to(device)
 		self.actor_target = copy.deepcopy(self.actor)
-		self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=3e-4)
+		self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=learning_rate)
 
 		self.critic = Critic(state_dim, action_dim).to(device)
 		self.critic_target = copy.deepcopy(self.critic)
-		self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=3e-4)
+		self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=learning_rate)
 
 		# self.pointnet = pointnet2.PointNet2Encoder(num_class=state_dim, normal_channel=True).to(device)
 		self.pointnet = pointnet1.PointNet_RLIO(k=state_dim, normal_channel=False).to(device)
 
 
-		self.max_action = max_action
+		# self.max_action = max_action
 		self.discount = discount
 		self.tau = tau
 		self.policy_noise = policy_noise
@@ -153,9 +163,7 @@ class RLIO_TD3_BC(object):
 					torch.randn_like(actions) * self.policy_noise
 				).clamp(-self.noise_clip, self.noise_clip)
 				
-				next_action = (
-					self.actor_target(next_state) + noise
-				).clamp(-self.max_action, self.max_action)
+				next_action = self.actor_target(next_state) + noise
 
 				# Compute the target Q value
 				target_Q1, target_Q2 = self.critic_target(next_state, next_action)
@@ -184,6 +192,9 @@ class RLIO_TD3_BC(object):
 
 				# Compute actor loss
 				pi = self.actor(state)
+
+				print(pi[0])
+
 				Q = self.critic.Q1(state, pi)
 				lmbda = self.alpha/Q.abs().mean().detach()
 

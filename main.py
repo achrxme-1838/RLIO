@@ -52,12 +52,12 @@ def main():
 	kwargs = {
 		"state_dim": state_dim,  # Will be dims of PointNet output
 		"action_dim": action_dim,
-		"max_action": max_action,
+		# "max_action": max_action,
 		"discount": discount,
 		"tau": tau,
 		# TD3
-		"policy_noise": policy_noise * max_action,
-		"noise_clip": noise_clip * max_action,
+		"policy_noise": policy_noise,
+		"noise_clip": noise_clip,
 		"policy_freq": policy_freq,
 		# TD3 + BC
 		"alpha": alpha,
