@@ -19,6 +19,14 @@ def main():
 	"""
 	RLIO all-LIO : RL LIO, the all things need to tune the LIO
 	"""
+
+	save_model = True
+	save_interval = 200
+	timestamp = time.strftime("%Y%m%d_%H%M%S")
+	save_path = f"/home/lim/rlio_ws/src/rlio/log/{timestamp}"
+	os.makedirs(save_path, exist_ok=True)
+
+
 	state_dim = 64 # Dim Pointnet output
 	action_dim = 4 # num params to tune
 
@@ -45,7 +53,7 @@ def main():
 
 	learning_rate = 3e-4 # 3e-4
 
-	add_critic_pointnet = True
+	add_critic_pointnet = False
 
 
 	kwargs = {
@@ -81,20 +89,25 @@ def main():
 		mean_reward, mean_actor_loss, mean_critic_loss, mean_target_Q, mean_Q_error = policy.train(add_critic_pointnet)
 
 		stop = time.time()
-		
-
 		preprocess_time = preprocess_stop - start
 		train_time = stop - preprocess_stop
 
 		total_time = stop - start
-		print(f"it : {it} total_time : {total_time}")
-
+		print(f"it : {it} total_time : {total_time}s")
 		if WANDB:
 			log_wandb(locals())
 
+		if save_model and it % save_interval == 0:
+			path = save_path + f"/{it}"
+			os.makedirs(path, exist_ok=True)
+
+			save(policy.actor, path + "/actor.pt")
+			save(policy.pointnet, path + "/pointnet.pt")
+
 		start = stop
 
-# def 
+def save(model, filename):
+	torch.save(model.state_dict(), filename)
 
 
 def log_wandb(locs):
@@ -110,7 +123,7 @@ def log_wandb(locs):
 
 	wandb.log(wandb_dict, step=locs['it'])
 
-WANDB = False
+WANDB = True
 
 if __name__ == "__main__":
 	if WANDB:
