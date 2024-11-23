@@ -82,13 +82,17 @@ class RLIODataConverter:
     def fixed_num_sample_points(self, exp_dir, sub_dir, selected_indices, num_points=1024):
         """
         To make the number of points fixed, it randomly samples points from each frame.
-        output: (#frames, 1024(#points/scan), 3)
+        output: 
+            points (#frames, 1024(#points/scan), 3)
+            next_points (#frames, 1024(#points/scan), 3)
+            done (#frames)
         """
         restored_path = self.restore_path(exp_dir, sub_dir)
         frames_path = os.path.join(restored_path, 'frames')
 
         points_in_this_traj = []
         next_points_in_this_traj = []
+        done = [] 
 
         valid_indices = list(range(len(selected_indices)))
 
@@ -129,15 +133,20 @@ class RLIODataConverter:
                     sampled_points = next_points[indices]
 
                 next_points_in_this_traj.append(sampled_points)
+                done.append(False)
                 
             else:
-                if i == selected_indices[-1]:
+                if i == selected_indices[-1]:  # Real end of the trajectory
                     sampled_points = np.zeros((num_points, 3))
                     next_points_in_this_traj.append(sampled_points)
+                    done.append(True)
+                else:   #  Maybe just the next frame is missing -> skip this frame
+                    # done.append(False)
+                    pass
 
             iter += 1
 
-        return np.array(points_in_this_traj), np.array(next_points_in_this_traj), valid_indices  # (#frames, 1024(#points), 3)
+        return np.array(points_in_this_traj), np.array(next_points_in_this_traj), valid_indices, np.array(done)  # (#frames, 1024(#points), 3)
     
     def pointnet_preprocess(self, points):
         """
@@ -175,14 +184,14 @@ class RLIODataConverter:
             
             params = self.sub_dir_to_param(sub_dir)  # action parameters
 
-            points_in_this_traj, next_points_in_this_traj, valid_indices = self.fixed_num_sample_points(exp_dir, sub_dir, selected_indices, num_points=1024)
+            points_in_this_traj, next_points_in_this_traj, valid_indices, dones = self.fixed_num_sample_points(exp_dir, sub_dir, selected_indices, num_points=1024)
 
             processed_points = self.pointnet_preprocess(points_in_this_traj)
             processed_next_points = self.pointnet_preprocess(next_points_in_this_traj)
 
             valid_errors = self.delete_invalid_errors(errors, valid_indices)
             
-            self.rollout_storage.add_new_trajs_to_buffer(processed_points, processed_next_points, valid_errors, params)
+            self.rollout_storage.add_new_trajs_to_buffer(processed_points, processed_next_points, valid_errors, params, dones)
 
 
 

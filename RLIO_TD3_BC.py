@@ -121,16 +121,15 @@ class RLIO_TD3_BC(object):
 	def train(self):
 		self.total_it += 1
 
-		# state, action, next_state, reward, not_done = replay_buffer.sample(batch_size)
-
 		generator= self.rollout_storage.mini_batch_generator()
 
-		for points, next_points, errors, actions in generator:
+		for points, next_points, errors, actions, dones in generator:
 			
 			state = points  # TODO: PointEncoder(points)
 			next_state = next_points  # TODO: PointEncoder(next_points)
 			reward = - errors	# TODO: Scaling
 
+			not_done = ~dones
 			
 			with torch.no_grad():
 				# Select action according to policy and add clipped noise

@@ -16,6 +16,8 @@ class RLIORolloutStorage:
         self.next_points_batch = torch.zeros(self.max_batch_size, 3, self.num_points, device=self.device)
         self.errors_batch = torch.zeros(self.max_batch_size, device=self.device)
         self.params_batch = torch.zeros(self.max_batch_size, 4, device=self.device)
+        self.dones_batch = torch.zeros(self.max_batch_size, dtype=torch.bool, device=self.device)
+
 
     def reset_batches(self):
         self.current_batch_idx = 0
@@ -25,7 +27,7 @@ class RLIORolloutStorage:
 
         self.errors_batch = torch.zeros(self.max_batch_size, device=self.device)
 
-    def add_new_trajs_to_buffer(self, points, next_points, errors, params):
+    def add_new_trajs_to_buffer(self, points, next_points, errors, params, dones):
         """
         points, next_points: (#frames, 3, 1024)
         errors: (#frames, 6)
@@ -38,9 +40,9 @@ class RLIORolloutStorage:
 
         self.points_batch[self.current_batch_idx:self.current_batch_idx+num_frames] = points
         self.next_points_batch[self.current_batch_idx:self.current_batch_idx+num_frames] = next_points
-
         self.errors_batch[self.current_batch_idx:self.current_batch_idx+num_frames] = torch.tensor(errors)
         self.params_batch[self.current_batch_idx:self.current_batch_idx+num_frames] = torch.tensor(params)
+        self.dones_batch[self.current_batch_idx:self.current_batch_idx+num_frames] = torch.tensor(dones)
 
         self.current_batch_idx += num_frames
 
@@ -54,6 +56,8 @@ class RLIORolloutStorage:
         valid_next_point_batch = self.next_points_batch[:self.current_batch_idx]
 
         valid_errors_batch = self.errors_batch[:self.current_batch_idx]
+        valid_params_batch = self.params_batch[:self.current_batch_idx]
+        valid_dones_batch = self.dones_batch[:self.current_batch_idx]
         
         for _ in range(self.num_epochs):
             # To deal with the case where the number of samples is not a multiple of the mini-batch size
@@ -68,6 +72,7 @@ class RLIORolloutStorage:
                 state_batch = valid_point_batch[batch_idx]
                 next_state_batch = valid_next_point_batch[batch_idx]
                 reward_batch = valid_errors_batch[batch_idx] # TODO: Need to be processed as reward (not just an error), maybe in the process_trajectory function
-                actions_batch = self.params_batch[batch_idx]
+                actions_batch = valid_params_batch[batch_idx]
+                dones_batch = valid_dones_batch[batch_idx]
 
-                yield state_batch, next_state_batch, reward_batch, actions_batch
+                yield state_batch, next_state_batch, reward_batch, actions_batch, dones_batch

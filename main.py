@@ -66,6 +66,8 @@ def main():
 
 
 	for t in range(int(max_timesteps)):
+		print(f"Step: {t}")
+		
 		policy.rollout_storage.reset_batches()
 		policy.data_converter.preprocess_trajectory()
 		
