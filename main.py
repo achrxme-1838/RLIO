@@ -30,7 +30,7 @@ def main():
 		wandb.run.name = run_name
 		wandb.run.save()
 
-	save_model = True
+	save_model = False
 	save_interval = 200
 	timestamp = time.strftime("%Y%m%d_%H%M%S")
 	save_path = f"/home/lim/rlio_ws/src/rlio/log/{timestamp}"
@@ -42,9 +42,8 @@ def main():
 
 	# Training related
 	max_timesteps = 500
-	num_trajs = 4
 	num_epochs = 4 # 4
-	mini_batch_size = 256 # 64 # 512
+	mini_batch_size = 64 #64 #256 # 64 # 512
 
 	# TD3
 	discount = 0.99
@@ -56,10 +55,16 @@ def main():
 	alpha = 2.5
 
 	# Batch size related
-	num_points_per_scan= 512 # 512  # 1024
-	max_batch_size = 6000 #3000 for 4 trajs
+	num_points_per_scan= 1024 # 512  # 1024
+
+	num_ids = 1 		# exp01, exp02, ...
+	num_trajs =	16 		# = num actions
+	num_steps = 8 # 64 		# for each traj  -> full batch size = num_ids * num_trajs * num_steps
 
 	learning_rate = 3e-4 # 3e-4
+
+	use_val = True
+	val_freq = 10
 
 	if WANDB_SWEEP:
 		learning_rate = wandb.config.learning_rate
@@ -87,10 +92,17 @@ def main():
 
 	# Initialize policy
 	policy = RLIO_TD3_BC.RLIO_TD3_BC(**kwargs)
-	policy.init_storage_and_converter(max_batch_size, mini_batch_size, num_epochs, num_trajs, num_points_per_scan)
+	# policy.init_storage_and_converter(max_batch_size, mini_batch_size, num_epochs, num_trajs, num_points_per_scan)
+	policy.init_storage_and_converter(
+										mini_batch_size=mini_batch_size,
+										num_epochs=num_epochs,
+										num_ids=num_ids,
+										num_trajs=num_trajs,
+										num_steps=num_steps,
+										num_points_per_scan=num_points_per_scan)	
+
 
 	for it in range(int(max_timesteps)):
-		# print()
 
 		start = time.time()
 
@@ -111,6 +123,11 @@ def main():
 
 		total_time = stop - start
 		print(f"it : {it} total_time : {total_time}s, pre_time : {preprocess_time}s, train_time : {train_time}s")
+
+		if use_val and it % val_freq == 0:
+			policy.validation()
+
+
 		if WANDB:
 			log_wandb(locals())
 
@@ -142,11 +159,10 @@ def log_wandb(locs, score=None):
 		wandb_dict['score'] = score
 
 	wandb.log(wandb_dict, step=locs['it'])
-
 	
 
-WANDB = False
-WANDB_SWEEP = False
+WANDB = True
+WANDB_SWEEP = True
 
 
 def objective(mean_target_Q):

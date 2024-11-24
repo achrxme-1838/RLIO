@@ -9,39 +9,70 @@ import open3d as o3d
 import provider
 import rlio_rollout_stoage
 
+import time
+
 class RLIODataConverter:
     def __init__(self, rollout_storage: rlio_rollout_stoage.RLIORolloutStorage, 
-                 num_trajs, num_points_per_scan):
+                mini_batch_size, num_epochs, num_ids, num_trajs, num_steps, num_points_per_scan):
         self.base_path = "/home/lim/HILTI22" 
         self.num_trajs = num_trajs
         self.num_points_per_scan = num_points_per_scan
+
+        self.num_ids = num_ids
+        self.num_trajs = num_trajs
+        self.num_steps = num_steps
 
         self.rollout_storage = rollout_storage
         self.error_array_name = 'error_array.npy'
         self.time_array_name = 'time.npy'
 
-    def random_select_trajectory(self):
+    def set_pcd_name_array_for_each_ids(self):
+        self.pcd_name_dict = {}
         exp_dirs = [d for d in os.listdir(self.base_path) if d.startswith('exp') and os.path.isdir(os.path.join(self.base_path, d))]
-        valid_pairs = []
 
         for exp_dir in exp_dirs:
-            # ours_path = os.path.join(self.base_path, exp_dir, 'RLIO1122test_all_pvlio', 'Hesai', 'ours')
+            pcd_path = os.path.join(self.base_path, exp_dir, 'RLIO_1122test', 'LiDARs', 'Hesai')
+            pcd_names = [f for f in os.listdir(pcd_path) if f.endswith('.pcd')]
+
+            self.pcd_name_dict[exp_dir] = pcd_names
+
+
+    def random_select_trajectory(self):
+        exp_dirs = [d for d in os.listdir(self.base_path) if d.startswith('exp') and os.path.isdir(os.path.join(self.base_path, d))]
+        seleced_exp_dirs = random.sample(exp_dirs, self.num_ids)
+
+        valid_pairs = []
+
+        for exp_dir in seleced_exp_dirs:
             ours_path = os.path.join(self.base_path, exp_dir, 'RLIO_1122test', 'Hesai', 'ours')
 
-            if os.path.exists(ours_path):
-                sub_dirs = [d for d in os.listdir(ours_path) if os.path.isdir(os.path.join(ours_path, d))]
-                for sub_dir in sub_dirs:
+        if os.path.exists(ours_path):
+            sub_dirs = [d for d in os.listdir(ours_path) if os.path.isdir(os.path.join(ours_path, d))]
+            
+            selected_sub_dirs = []
+            attempts = 0
+            max_attempts = 10 
+            while len(selected_sub_dirs) < self.num_trajs and attempts < max_attempts:
+                remaining_sub_dirs = list(set(sub_dirs) - set(selected_sub_dirs))
+                if not remaining_sub_dirs:
+                    break
+                to_sample = min(len(remaining_sub_dirs), self.num_trajs - len(selected_sub_dirs))
+                sampled_dirs = random.sample(remaining_sub_dirs, to_sample)
+
+                for sub_dir in sampled_dirs:
                     status_file = os.path.join(ours_path, sub_dir, 'status.txt')
                     if os.path.exists(status_file):
                         with open(status_file, 'r') as f:
                             content = f.read().strip()
                         if content == "Finished":
-                            valid_pairs.append((exp_dir, sub_dir))
+                            selected_sub_dirs.append(sub_dir)
 
-        if len(valid_pairs) < self.num_trajs:
-            raise ValueError(f"Not enough valid trajectories found. Requested: {self.num_trajs}, Available: {len(valid_pairs)}")
+                attempts += 1
 
-        return random.sample(valid_pairs, self.num_trajs)
+            for sub_dir in selected_sub_dirs:
+                valid_pairs.append((exp_dir, sub_dir))
+
+        return valid_pairs
     
     def restore_path(self, exp_dir, sub_dir):
         # restored_path = os.path.join( self.base_path, exp_dir, 'RLIO1122test_all_pvlio', 'Hesai', 'ours', sub_dir)
@@ -78,35 +109,31 @@ class RLIODataConverter:
         else:
             print(f"No rpe_trans error zip file: {errors_zip}")
 
+        # print(selected_indices)
+
         return selected_indices, errors
 
     def fixed_num_sample_points(self, exp_dir, sub_dir, selected_indices, num_points=1024):
         """
         To make the number of points fixed, it randomly samples points from each frame.
         output: 
-            points (#frames, 1024(#points/scan), 3)
-            next_points (#frames, 1024(#points/scan), 3)
-            done (#frames)
+            points (#steps, 1024(#points/scan), 3)
+            next_points (#steps, 1024(#points/scan), 3)
+            done (#steps)
         """
-        restored_path = self.restore_path(exp_dir, sub_dir)
-        frames_path = os.path.join(restored_path, 'frames')
+        frames_path = os.path.join(self.base_path, exp_dir,'RLIO_1122test/LiDARs/Hesai')
 
         points_in_this_traj = []
         next_points_in_this_traj = []
         done = [] 
 
-        valid_indices = list(range(len(selected_indices)))
-
-        iter = 0
         for i in selected_indices:
-            pcd_name = "F_" + str(i) + "_ours_" + sub_dir + ".pcd"
-            next_pcd_name = "F_" + str(i+1) + "_ours_" + sub_dir + ".pcd"
+            path_to_pcd = os.path.join(frames_path, self.pcd_name_dict[exp_dir][i])
+            path_to_next_pcd = os.path.join(frames_path, self.pcd_name_dict[exp_dir][i+1])
 
-            pcd_path = os.path.join(frames_path, pcd_name)
-            next_pcd_path = os.path.join(frames_path, next_pcd_name)
-
-            if os.path.exists(pcd_path):
-                pcd = o3d.io.read_point_cloud(pcd_path)
+            # print(i, path_to_pcd)
+            if os.path.exists(path_to_pcd):
+                pcd = o3d.io.read_point_cloud(path_to_pcd)
                 points = np.asarray(pcd.points)
 
                 if points.shape[0] > num_points:
@@ -118,12 +145,10 @@ class RLIODataConverter:
 
                 points_in_this_traj.append(sampled_points)
             else:
-                valid_indices.remove(iter)
-                if i >= 10:
-                    print(f"File not found: {pcd_path}")
+                print(f"PCD File not found: {path_to_pcd}")
 
-            if os.path.exists(pcd_path) and os.path.exists(next_pcd_path):
-                next_pcd = o3d.io.read_point_cloud(next_pcd_path)
+            if os.path.exists(path_to_pcd) and os.path.exists(path_to_next_pcd):
+                next_pcd = o3d.io.read_point_cloud(path_to_next_pcd)
                 next_points = np.asarray(next_pcd.points)
 
                 if next_points.shape[0] > num_points:
@@ -135,19 +160,14 @@ class RLIODataConverter:
 
                 next_points_in_this_traj.append(sampled_points)
                 done.append(False)
-                
+            elif os.path.exists(path_to_pcd) and not os.path.exists(path_to_next_pcd):
+                sampled_points = np.zeros((num_points, 3))
+                next_points_in_this_traj.append(sampled_points)
+                done.append(True)
             else:
-                if i == selected_indices[-1]:  # Real end of the trajectory
-                    sampled_points = np.zeros((num_points, 3))
-                    next_points_in_this_traj.append(sampled_points)
-                    done.append(True)
-                else:   #  Maybe just the next frame is missing -> skip this frame
-                    # done.append(False)
-                    pass
+                print(f"Next PCD File not found: {path_to_pcd}")       
 
-            iter += 1
-
-        return np.array(points_in_this_traj), np.array(next_points_in_this_traj), valid_indices, np.array(done)  # (#frames, 1024(#points), 3)
+        return np.array(points_in_this_traj), np.array(next_points_in_this_traj), np.array(done)  # (#frames, 1024(#points), 3)
     
     def pointnet_preprocess(self, points):
         """
@@ -180,6 +200,14 @@ class RLIODataConverter:
 
         # print((1-coef*errors).mean())
         return 1-coef*errors
+    
+    def select_steps(self, valid_indices, errors):
+        """
+        Select the steps to be used for training.
+        """
+        selections = random.sample(range(len(valid_indices)), self.num_steps)
+        return valid_indices[selections], errors[selections]
+
 
     def preprocess_trajectory(self):
         sampled_traj_name_pairs = self.random_select_trajectory()
@@ -187,20 +215,24 @@ class RLIODataConverter:
 
             # print(f"Processing: {exp_dir}/{sub_dir}")
 
-            selected_indices, errors = self.preprocess_errors(exp_dir, sub_dir)
-            
-            params = self.sub_dir_to_param(sub_dir)  # action parameters
+            params = self.sub_dir_to_param(sub_dir) # action parameters
 
-            points_in_this_traj, next_points_in_this_traj, valid_indices, dones = self.fixed_num_sample_points(exp_dir, sub_dir, selected_indices, num_points=self.num_points_per_scan)
+            valid_indices, errors = self.preprocess_errors(exp_dir, sub_dir)
+            selected_indices, selected_errors = self.select_steps(valid_indices, errors)
+            
+            # start = time.time()
+            points_in_this_traj, next_points_in_this_traj, done = self.fixed_num_sample_points(exp_dir, sub_dir, selected_indices, num_points=self.num_points_per_scan)
+            # end = time.time()
 
             processed_points = self.pointnet_preprocess(points_in_this_traj)
             processed_next_points = self.pointnet_preprocess(next_points_in_this_traj)
-
-            valid_errors = self.delete_invalid_errors(errors, valid_indices)
-            rewards = self.calculate_reward(valid_errors)
             
-            self.rollout_storage.add_new_trajs_to_buffer(processed_points, processed_next_points, rewards, params, dones)
+            rewards = self.calculate_reward(selected_errors)
 
+            self.rollout_storage.add_new_trajs_to_buffer(processed_points, processed_next_points, rewards, params, done)
 
+            # end = time.time()
 
+            # print(f"Time taken: {end-start}")
 
+        

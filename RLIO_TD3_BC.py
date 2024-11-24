@@ -10,6 +10,10 @@ import rlio_rollout_stoage
 
 import pointnet1
 
+import random
+import os
+import open3d as o3d
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -32,6 +36,7 @@ class Actor(nn.Module):
 		# Define action range min and max for each action dimension
 		self.action_min = torch.tensor([0.25, 3.0, 0.25, 0.005], device=device)
 		self.action_max = torch.tensor([1.0, 5.0, 1.0, 0.1], device=device)
+
 		
 	def forward(self, state):
 		a = F.relu(self.l1(state))
@@ -106,7 +111,6 @@ class RLIO_TD3_BC(object):
 		self.critic_pointnet = pointnet1.PointNet_RLIO(k=state_dim, normal_channel=False).to(device)
 
 
-
 		# self.max_action = max_action
 		self.discount = discount
 		self.tau = tau
@@ -120,22 +124,135 @@ class RLIO_TD3_BC(object):
 		self.rollout_storage = None
 		self.data_converter = None
 
+		self.action_discrete_ranges = {
+            0: torch.tensor([0.25, 0.5, 0.75, 1.0], device=device),
+            1: torch.tensor([3.0, 4.0, 5.0], device=device),
+            2: torch.tensor([0.25, 0.5, 0.75, 1.0], device=device),
+            3: torch.tensor([0.005, 0.05, 0.01, 0.1], device=device)
+        }
 
 	def select_action(self, state):
 		state = torch.FloatTensor(state.reshape(1, -1)).to(device)
 		return self.actor(state).cpu().data.numpy().flatten()
 	
-	def init_storage_and_converter(self,max_batch_size, mini_batch_size, num_epochs, num_trajs, num_points_per_scan):
+	def init_storage_and_converter(	self,
+									mini_batch_size, 
+									num_epochs, 
+									num_ids,				# exp01, exp02, ...
+									num_trajs,				# = num actions
+									num_steps,				# for each traj  -> full batch size = num_ids * num_trajs * num_steps
+									num_points_per_scan):
 
-		self.rollout_storage = rlio_rollout_stoage.RLIORolloutStorage(max_batch_size=max_batch_size, num_points=num_points_per_scan,
-																	mini_batch_size=mini_batch_size, num_epochs=num_epochs)
-		self.data_converter = rlio_data_converter.RLIODataConverter(self.rollout_storage, num_trajs=num_trajs, num_points_per_scan=num_points_per_scan)
+		self.rollout_storage = rlio_rollout_stoage.RLIORolloutStorage(	mini_batch_size=mini_batch_size,
+																		num_epochs=num_epochs,
+																		num_ids=num_ids,
+																		num_trajs=num_trajs,
+																		num_steps=num_steps,
+																		num_points_per_scan=num_points_per_scan)
+		self.data_converter = rlio_data_converter.RLIODataConverter(	rollout_storage=self.rollout_storage, 
+																		mini_batch_size=mini_batch_size,
+																		num_epochs=num_epochs,
+																		num_ids=num_ids,
+																		num_trajs=num_trajs,
+																		num_steps=num_steps,
+																		num_points_per_scan=num_points_per_scan)
+		
+		self.data_converter.set_pcd_name_array_for_each_ids()
+		
 
 	def reset_batches(self):
 		self.rollout_storage.reset_batches()
 
 	def process_trajectory(self):
 		self.data_converter.preprocess_trajectory()
+
+	def discretize_action(self, action):
+		"""
+		action: Tensor of shape (batch_size, num_features)
+		"""
+		discretized_action = action.clone()
+		for idx, discrete_values in self.action_discrete_ranges.items():
+			differences = torch.abs(action[:, idx].unsqueeze(1) - discrete_values)
+			closest_indices = differences.argmin(dim=1)
+			discretized_action[:, idx] = discrete_values[closest_indices]
+
+		return discretized_action
+
+	def validation(self):
+
+		self.pointnet.eval()
+		
+		num_points = self.data_converter.num_points_per_scan
+		
+		mean_error = 0
+		num_error_added = 0
+
+		sampled_traj_name_pairs = self.data_converter.random_select_trajectory()
+
+		for exp_dir, _ in sampled_traj_name_pairs:
+			frames_path = os.path.join(self.data_converter.base_path, exp_dir,'RLIO_1122test/LiDARs/Hesai')
+			ours_path = os.path.join(self.data_converter.base_path, exp_dir, 'RLIO_1122test', 'Hesai', 'ours')
+
+			# select 10 steps
+			selected_steps = random.sample(range(len(self.data_converter.pcd_name_dict[exp_dir])), 10)
+
+			for t in selected_steps:
+				path_to_pcd = os.path.join(frames_path, self.data_converter.pcd_name_dict[exp_dir][t])
+				pcd = o3d.io.read_point_cloud(path_to_pcd)
+				points = np.asarray(pcd.points)
+
+				if points.shape[0] > num_points:
+					indices = np.random.choice(points.shape[0], num_points, replace=False)
+					sampled_points = points[indices]
+				else:
+					indices = np.random.choice(points.shape[0], num_points, replace=True)
+					sampled_points = points[indices]
+
+				processed_points = self.data_converter.pointnet_preprocess(sampled_points.reshape(1, num_points, 3))
+				processed_points_tensor = processed_points.to(device).clone().detach()
+
+
+				with torch.no_grad():
+
+					state, _ = self.pointnet(processed_points_tensor)
+					pi = self.actor(state)
+				disc_pi = self.discretize_action(pi)
+
+				disc_pi = disc_pi[0]
+
+				# sub_dir =str(disc_pi[0]) + '_' + str(disc_pi[1]) + '_' + str(disc_pi[2]) + '_' + str(disc_pi[3])
+				sub_dir = f"{disc_pi[0].item():g}_{disc_pi[1].item():.0f}_{disc_pi[2].item():g}_{disc_pi[3].item():g}"
+
+				# Handle diverges
+				status_file = os.path.join(ours_path, sub_dir, 'status.txt')
+				if os.path.exists(status_file):
+					with open(status_file, 'r') as f:
+						content = f.read().strip()
+					if content == "Finished":
+						# print(sub_dir)
+						valid_indices, errors = self.data_converter.preprocess_errors(exp_dir, sub_dir)
+
+						valid_indices = np.array(valid_indices)  # Ensure valid_indices is a numpy array
+						closest_index = np.abs(valid_indices - t).argmin()
+
+						error = errors[closest_index]
+					else:
+						# print("Diverged")
+						error = 100
+
+				else:
+					print("No status file")
+
+				num_error_added += 1
+				mean_error += error
+
+		self.pointnet.train()
+
+		mean_error /= num_error_added
+		num_error_added = 0
+
+		print(mean_error)
+		return mean_error
 
 
 	def train(self, add_critic_pointnet):
@@ -153,7 +270,7 @@ class RLIO_TD3_BC(object):
 		generator= self.rollout_storage.mini_batch_generator()
 
 		for points, next_points, reward, actions, dones in generator:
-
+			
 			state, _ = self.pointnet(points) # global feature & feature transform matrix(auxiliary)
 			next_state, _ = self.pointnet(next_points) # global feature & feature transform matrix(auxiliary)
 

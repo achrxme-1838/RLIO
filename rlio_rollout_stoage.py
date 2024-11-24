@@ -1,14 +1,15 @@
 import torch
 
 class RLIORolloutStorage:
-    def __init__(self, max_batch_size=1000, num_points=1024, mini_batch_size=16, num_epochs=8):
+    def __init__(self, mini_batch_size, num_epochs, num_ids, num_trajs, num_steps, num_points_per_scan):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        self.max_batch_size = num_ids * num_trajs * num_steps
 
         self.mini_batch_size = mini_batch_size
         self.num_epochs = num_epochs
 
-        self.max_batch_size = max_batch_size
-        self.num_points = num_points
+        self.num_points = num_points_per_scan
 
         self.current_batch_idx = 0
 
@@ -17,7 +18,6 @@ class RLIORolloutStorage:
         self.rewards_batch = torch.zeros(self.max_batch_size, dtype=torch.float32, device=self.device, requires_grad=False)
         self.params_batch = torch.zeros(self.max_batch_size, 4, dtype=torch.float32, device=self.device, requires_grad=False)
         self.dones_batch = torch.zeros(self.max_batch_size, dtype=torch.bool, device=self.device, requires_grad=False)
-
 
     def reset_batches(self):
         self.current_batch_idx = 0
@@ -53,18 +53,11 @@ class RLIORolloutStorage:
         """
         Generate mini-batches for training.
         """
-        self.num_mini_batches = self.current_batch_idx // self.mini_batch_size
+        self.num_mini_batches = self.max_batch_size // self.mini_batch_size
 
-        valid_point_batch = self.points_batch[:self.current_batch_idx].detach()
-        valid_next_point_batch = self.next_points_batch[:self.current_batch_idx].detach()
-
-        valid_rewards_batch = self.rewards_batch[:self.current_batch_idx].detach()
-        valid_params_batch = self.params_batch[:self.current_batch_idx].detach()
-        valid_dones_batch = self.dones_batch[:self.current_batch_idx].detach()
-        
         for _ in range(self.num_epochs):
             # To deal with the case where the number of samples is not a multiple of the mini-batch size
-            indices = torch.randperm(self.current_batch_idx, requires_grad=False, device=self.device)
+            indices = torch.randperm(self.num_mini_batches * self.mini_batch_size, requires_grad=False, device=self.device)
 
             for i in range(self.num_mini_batches):
 
@@ -72,10 +65,10 @@ class RLIORolloutStorage:
                 end = (i+1)*self.mini_batch_size
                 batch_idx = indices[start:end]
 
-                state_batch = valid_point_batch[batch_idx]
-                next_state_batch = valid_next_point_batch[batch_idx]
-                reward_batch = valid_rewards_batch[batch_idx].unsqueeze(1)
-                actions_batch = valid_params_batch[batch_idx]
-                dones_batch = valid_dones_batch[batch_idx].unsqueeze(1)
+                state_batch = self.points_batch[batch_idx].detach()
+                next_state_batch = self.next_points_batch[batch_idx].detach()
+                reward_batch = self.rewards_batch[batch_idx].unsqueeze(1).detach()
+                actions_batch = self.params_batch[batch_idx].detach()
+                dones_batch = self.dones_batch[batch_idx].unsqueeze(1).detach()
 
                 yield state_batch, next_state_batch, reward_batch, actions_batch, dones_batch
