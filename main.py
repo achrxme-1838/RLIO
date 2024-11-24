@@ -10,8 +10,6 @@ import wandb
 import time
 
 
-wandb.login()
-
 # import rollout_storage as rs
 
 def main():
@@ -43,7 +41,7 @@ def main():
 	action_dim = 4 # num params to tune
 
 	# Training related
-	max_timesteps = 1000
+	max_timesteps = 500
 	num_trajs = 4
 	num_epochs = 4 # 4
 	mini_batch_size = 256 # 64 # 512
@@ -75,7 +73,6 @@ def main():
 	kwargs = {
 		"state_dim": state_dim,  # Will be dims of PointNet output
 		"action_dim": action_dim,
-		# "max_action": max_action,
 		"discount": discount,
 		"tau": tau,
 		# TD3
@@ -132,14 +129,14 @@ def save(model, filename):
 
 def log_wandb(locs, score=None):
 	wandb_dict = {}
-	wandb_dict['Loss/mean_reward'] = locs["mean_reward"]
-	wandb_dict['Loss/mean_actor_loss'] = locs["mean_actor_loss"]
-	wandb_dict['Loss/mean_critic_loss'] = locs["mean_critic_loss"]
-	wandb_dict['Loss/mean_target_Q'] = locs["mean_target_Q"]
-	wandb_dict['Loss/mean_Q_error'] = locs["mean_Q_error"]
+	wandb_dict['Loss/mean_reward'] = locs.get("mean_reward", 0.0)
+	wandb_dict['Loss/mean_actor_loss'] = locs.get("mean_actor_loss", 0.0)
+	wandb_dict['Loss/mean_critic_loss'] = locs.get("mean_critic_loss", 0.0)	
+	wandb_dict['Loss/mean_target_Q'] = locs.get("mean_target_Q", 0.0)
+	wandb_dict['Loss/mean_Q_error'] = locs.get("mean_Q_error", 0.0)
 
-	wandb_dict['Performance/preprocess_time'] = locs["preprocess_time"]
-	wandb_dict['Performance/train_time'] = locs["train_time"]
+	wandb_dict['Performance/preprocess_time'] = locs.get("preprocess_time", 0.0)
+	wandb_dict['Performance/train_time'] = locs.get("train_time", 0.0)
 
 	if score is not None:
 		wandb_dict['score'] = score
@@ -148,8 +145,8 @@ def log_wandb(locs, score=None):
 
 	
 
-WANDB = True
-WANDB_SWEEP = True
+WANDB = False
+WANDB_SWEEP = False
 
 
 def objective(mean_target_Q):
@@ -160,48 +157,25 @@ def objective(mean_target_Q):
 
 if __name__ == "__main__":
 
+	if WANDB:
+		wandb.login()
+
 	if WANDB_SWEEP:
 		
 		sweep_configuration = {
 			"method": "random",
 			"metric": {"goal": "maximize", "name": "score"},
 			"parameters": {
-				"learning_rate": {"max:": 1e-3, "min": 1e-5},
-				"state_dim": {"value": [32, 64, 128]},
+				"learning_rate": {"max": 1e-3, "min": 1e-5},
+				"state_dim": {"values": [32, 64, 128]},
 				"tau": {"max":0.1, "min":0.0001},
-				"alpha": {"max": 10, "min": 0.25},
+				"alpha": {"max": 10.0, "min": 0.25},
 			}
 		}
 
-
-		# state_dim = 64 # Dim Pointnet output
-		# action_dim = 4 # num params to tune
-
-		# # Training related
-		# max_timesteps = 10#00
-		# num_trajs = 4
-		# num_epochs = 4 # 4
-		# mini_batch_size = 256 # 64 # 512
-
-		# # TD3
-		# discount = 0.99
-		# tau = 0.005               
-		# policy_noise = 0.2
-		# noise_clip = 0.5        
-		# policy_freq = 2 
-		# # TD3 + BC
-		# alpha = 2.5
-
-		# # Batch size related
-		# num_points_per_scan= 5 #12 # 512  # 1024
-		# max_batch_size = 6000 #3000 for 4 trajs
-
-		# learning_rate = 3e-4 # 3e-4
-
 		sweep_id = wandb.sweep(sweep=sweep_configuration, project="rlio_sweep")
-		# score = objective(wandb.config)
 
-		wandb.agent(sweep_id, function=main, count=10)
+		wandb.agent(sweep_id, function=main, count=1000)
 
 	else:
 		main()

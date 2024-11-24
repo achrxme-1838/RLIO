@@ -70,6 +70,7 @@ class RLIODataConverter:
                         time_array = np.load(BytesIO(file.read()))
                     if len(time_array) == len(error_array) + 1: # Note: it is yield.. need to check
                         time_array = time_array[:-1]
+                    # np.set_printoptions(suppress=True, precision=20, formatter={'float': '{:.10f}'.format})
 
             selected_indices = np.array([np.argmin(np.abs(poses_times - time)) for time in time_array])
             errors = error_array
