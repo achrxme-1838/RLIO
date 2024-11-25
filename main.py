@@ -138,7 +138,7 @@ def main():
 			log_wandb(locals())
 
 		if WANDB_SWEEP:
-			score =  mean_reward_val
+			score =  mean_reward_val - mean_reward
 
 			log_wandb(locals(), score)
 
@@ -156,14 +156,18 @@ def save(model, filename):
 
 
 def log_wandb(locs, score=None):
+	# Note : mean_reward = just from the training set (set character)
+	#        mean_reward_val = from the policy
+	#        thus, the difference btw the mean_reward and val_reward = score ( = val - data, larger is better)
+
 	wandb_dict = {}
 	wandb_dict['Loss/mean_reward'] = locs.get("mean_reward", 0.0)
+	wandb_dict['Loss/mean_reward_val'] = locs.get("mean_reward_val", 0.0)
+
 	wandb_dict['Loss/mean_actor_loss'] = locs.get("mean_actor_loss", 0.0)
 	wandb_dict['Loss/mean_critic_loss'] = locs.get("mean_critic_loss", 0.0)	
 	wandb_dict['Loss/mean_target_Q'] = locs.get("mean_target_Q", 0.0)
 	wandb_dict['Loss/mean_Q_error'] = locs.get("mean_Q_error", 0.0)
-
-	wandb_dict['Loss/mean_valid_error'] = locs.get("mean_valid_error", 0.0)
 
 	wandb_dict['Performance/preprocess_time'] = locs.get("preprocess_time", 0.0)
 	wandb_dict['Performance/train_time'] = locs.get("train_time", 0.0)
@@ -174,8 +178,8 @@ def log_wandb(locs, score=None):
 	wandb.log(wandb_dict, step=locs['it'])
 	
 
-WANDB = False
-WANDB_SWEEP = False
+WANDB = True
+WANDB_SWEEP = True
 
 
 def objective(mean_target_Q):
