@@ -44,10 +44,6 @@ class RLIORolloutStorage:
         if self.current_batch_idx + num_frames > self.max_batch_size:
             raise AssertionError("Rollout buffer overflow")
         
-        print(num_frames)
-        print(points.shape)
-        print(params.shape)
-
         self.points_batch[self.current_batch_idx:self.current_batch_idx+num_frames] = points
         self.next_points_batch[self.current_batch_idx:self.current_batch_idx+num_frames] = next_points
         self.rewards_batch[self.current_batch_idx:self.current_batch_idx+num_frames] = torch.tensor(rewards)

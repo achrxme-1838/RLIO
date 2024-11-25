@@ -396,20 +396,5 @@ class RLIODataConverter:
         all_params = np.concatenate(all_params, axis=0)
         all_done = np.concatenate(all_done)
 
-        # Now, you can convert NumPy arrays to Torch tensors if needed
-        # For example:
-        # all_processed_points = torch.tensor(all_processed_points)
-        # all_processed_next_points = torch.tensor(all_processed_next_points)
-        # all_rewards = torch.tensor(all_rewards)
-        # all_params = torch.tensor(all_params)
-        # all_done = torch.tensor(all_done)
-    
-        print("=======================")
-        print(all_processed_points.shape)
-        print(all_processed_next_points.shape)
-        print(all_rewards.shape)
-        print(all_params.shape)
-        print(all_done.shape)
-        # Now, add to buffer
         self.rollout_storage.add_new_trajs_to_buffer(
             all_processed_points, all_processed_next_points, all_rewards, all_params, all_done)
