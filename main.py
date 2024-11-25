@@ -217,7 +217,7 @@ if __name__ == "__main__":
 				# 		{"param1": 1, "param2": 16, "param3": 8},
 				# 		]
 				# 	},
-				"reward_scale" : {"max":100.0, "min":1.0},
+				"reward_scale" : {"max":10.0, "min":1.0},
 			}
 		}
 

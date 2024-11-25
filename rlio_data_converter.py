@@ -38,25 +38,6 @@ class RLIODataConverter:
 
             self.pcd_name_dict[exp_dir] = pcd_names
 
-
-    # def random_select_trajectory(self):
-    #     exp_dirs = [d for d in os.listdir(self.base_path) if d.startswith('exp') and os.path.isdir(os.path.join(self.base_path, d))]
-    #     seleced_exp_dirs = random.sample(exp_dirs, self.num_ids)
-
-    #     valid_pairs = []
-
-    #     for exp_dir in seleced_exp_dirs:
-    #         ours_path = os.path.join(self.base_path, exp_dir, 'RLIO_1122test', 'Hesai', 'ours')
-
-    #         if os.path.exists(ours_path):
-    #             sub_dirs = [d for d in os.listdir(ours_path) if os.path.isdir(os.path.join(ours_path, d))]
-    #             selected_sub_dirs = random.sample(sub_dirs, self.num_trajs)
-    #             for sub_dir in selected_sub_dirs:
-
-    #                 poses_dir = os.path.join(ours_path, sub_dir, 'poses.txt')
-    #                 valid_pairs.append((exp_dir, sub_dir))
-
-    #     return valid_pairs
     
     def random_select_trajectory(self):
         exp_dirs = [d for d in os.listdir(self.base_path) if d.startswith('exp') and os.path.isdir(os.path.join(self.base_path, d))]
