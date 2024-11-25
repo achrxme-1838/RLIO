@@ -14,6 +14,7 @@ import random
 import os
 import open3d as o3d
 
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -191,12 +192,13 @@ class RLIO_TD3_BC(object):
 		sampled_traj_name_pairs = self.data_converter.random_select_trajectory()
 		for exp_dir, sub_dir in sampled_traj_name_pairs:
 			valid_steps = self.data_converter.get_valid_indices(exp_dir, sub_dir) 
+
 			last_valid_step = valid_steps[-1]
 			selected_steps = self.data_converter.sample_steps(valid_steps)
 
 			points_in_this_traj, _, _ = self.data_converter.fixed_num_sample_points(exp_dir, selected_steps, valid_steps, last_valid_step) 
 			processed_points = self.data_converter.pointnet_preprocess(points_in_this_traj)
-			processed_points_tensor = processed_points.to(device).clone().detach()
+			processed_points_tensor = torch.tensor(processed_points, dtype=torch.float32).to(device).clone().detach()
 
 			# get action for each state
 			for i in range(len(selected_steps)):

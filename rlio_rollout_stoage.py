@@ -30,16 +30,23 @@ class RLIORolloutStorage:
         self.dones_batch = torch.zeros(self.max_batch_size, dtype=torch.bool, device=self.device, requires_grad=False)
 
 
-    def add_new_trajs_to_buffer(self, points, next_points, rewards, params, dones):
+    def add_new_trajs_to_buffer(self, points_np, next_points_np, rewards, params, dones):
         """
         points, next_points: (#frames, 3, 1024)
         rewards: (#frames, 6)
         """
+        points = torch.tensor(points_np, dtype=torch.float32, device=self.device)
+        next_points = torch.tensor(next_points_np, dtype=torch.float32, device=self.device)
+
         num_frames, _, num_points = points.shape # (#frames, 3, 1024)
         assert num_points == self.num_points     # 1024
 
         if self.current_batch_idx + num_frames > self.max_batch_size:
             raise AssertionError("Rollout buffer overflow")
+        
+        print(num_frames)
+        print(points.shape)
+        print(params.shape)
 
         self.points_batch[self.current_batch_idx:self.current_batch_idx+num_frames] = points
         self.next_points_batch[self.current_batch_idx:self.current_batch_idx+num_frames] = next_points
