@@ -190,7 +190,7 @@ class RLIO_TD3_BC(object):
 
 		sampled_traj_name_pairs = self.data_converter.random_select_trajectory()
 		for exp_dir, sub_dir in sampled_traj_name_pairs:
-			valid_steps = self.data_converter.get_valid_idices(exp_dir, sub_dir) 
+			valid_steps = self.data_converter.get_valid_indices(exp_dir, sub_dir) 
 			last_valid_step = valid_steps[-1]
 			selected_steps = self.data_converter.sample_steps(valid_steps)
 
@@ -211,7 +211,7 @@ class RLIO_TD3_BC(object):
 				disc_pi = disc_pi[0]
 
 				new_sub_dir = f"{disc_pi[0].item():.1f}_{disc_pi[1].item():.0f}_{disc_pi[2].item():.1f}_{disc_pi[3].item():g}"
-				new_valid_steps = self.data_converter.get_valid_idices(exp_dir, new_sub_dir)
+				new_valid_steps = self.data_converter.get_valid_indices(exp_dir, new_sub_dir)
 				new_last_valid_step = new_valid_steps[-1]
 				reward = self.data_converter._get_reward_for_valid(exp_dir, new_sub_dir, step, new_valid_steps, new_last_valid_step)
 
