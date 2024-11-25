@@ -9,8 +9,12 @@ import RLIO_TD3_BC
 import wandb
 import time
 
+# TODO
+# 1. Error rpe trans + rot both
 
-# import rollout_storage as rs
+WANDB = False
+WANDB_SWEEP = False
+
 
 def main():
 	"""
@@ -57,14 +61,15 @@ def main():
 	# Batch size related
 	num_points_per_scan= 1024 # 512  # 1024
 
-	num_ids = 1 		# exp01, exp02, ...
-	num_trajs =	16 		# = num actions
+	# (1, 16, 8)
+	num_ids = 4 		# exp01, exp02, ...
+	num_trajs =	4 		# = num actions
 	num_steps = 8 # 64 		# for each traj  -> full batch size = num_ids * num_trajs * num_steps
 
 	learning_rate = 3e-4 # 3e-4
 
 	use_val = True
-	val_freq = 5
+	val_freq = 1 # 5
 
 	if WANDB_SWEEP:
 		learning_rate = wandb.config.learning_rate
@@ -128,7 +133,7 @@ def main():
 		if use_val and it % val_freq == 0:
 			mean_reward_val = policy.validation()
 
-			print(mean_reward_val)
+			print("mean_rew_val : ", mean_reward_val)
 
 		# else:
 		# 	mean_valid_error = 0.0
@@ -159,6 +164,7 @@ def log_wandb(locs, score=None):
 	# Note : mean_reward = just from the training set (set character)
 	#        mean_reward_val = from the policy
 	#        thus, the difference btw the mean_reward and val_reward = score ( = val - data, larger is better)
+	# score =  mean_reward_val - mean_reward
 
 	wandb_dict = {}
 	wandb_dict['Loss/mean_reward'] = locs.get("mean_reward", 0.0)
@@ -177,10 +183,6 @@ def log_wandb(locs, score=None):
 
 	wandb.log(wandb_dict, step=locs['it'])
 	
-
-WANDB = True
-WANDB_SWEEP = True
-
 
 def objective(mean_target_Q):
     # score = config.x**3 + config.y

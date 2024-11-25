@@ -34,8 +34,8 @@ class Actor(nn.Module):
 		self.l3 = nn.Linear(256, action_dim)
 
 		# Define action range min and max for each action dimension
-		self.action_min = torch.tensor([0.25, 3.0, 0.25, 0.005], device=device)
-		self.action_max = torch.tensor([1.0, 5.0, 1.0, 0.1], device=device)
+		self.action_min = torch.tensor([0.2, 2, 0.2, 0.005], device=device)
+		self.action_max = torch.tensor([1.0, 5, 1.0, 0.1], device=device)
 
 		
 	def forward(self, state):
@@ -125,10 +125,10 @@ class RLIO_TD3_BC(object):
 		self.data_converter = None
 
 		self.action_discrete_ranges = {
-            0: torch.tensor([0.25, 0.5, 0.75, 1.0], device=device),
-            1: torch.tensor([3.0, 4.0, 5.0], device=device),
-            2: torch.tensor([0.25, 0.5, 0.75, 1.0], device=device),
-            3: torch.tensor([0.005, 0.05, 0.01, 0.1], device=device)
+            0: torch.tensor([0.2, 0.4, 0.5, 0.6, 0.8, 1.0], device=device),
+            1: torch.tensor([2, 3, 4, 5], device=device),
+            2: torch.tensor([0.2, 0.4, 0.6, 0.8, 1.0], device=device),
+            3: torch.tensor([0.005, 0.001, 0.05, 0.01, 0.1], device=device)
         }
 
 	def select_action(self, state):
@@ -184,7 +184,6 @@ class RLIO_TD3_BC(object):
 		mean_reward = 0
 		num_reward_added = 0
 
-
 		sampled_traj_name_pairs = self.data_converter.random_select_trajectory()
 		for exp_dir, sub_dir in sampled_traj_name_pairs:
 			valid_steps = self.data_converter.get_valid_idices(exp_dir, sub_dir) 
@@ -207,8 +206,15 @@ class RLIO_TD3_BC(object):
 				disc_pi = self.discretize_action(pi)
 				disc_pi = disc_pi[0]
 
-				new_sub_dir = f"{disc_pi[0].item():g}_{disc_pi[1].item():.0f}_{disc_pi[2].item():g}_{disc_pi[3].item():g}"
-				reward = self.data_converter._get_reward(exp_dir, new_sub_dir, step, valid_steps, last_valid_step)
+				new_sub_dir = f"{disc_pi[0].item():.1f}_{disc_pi[1].item():.0f}_{disc_pi[2].item():.1f}_{disc_pi[3].item():g}"
+				new_valid_steps = self.data_converter.get_valid_idices(exp_dir, new_sub_dir)
+				new_last_valid_step = new_valid_steps[-1]
+				reward = self.data_converter._get_reward_for_valid(exp_dir, new_sub_dir, step, new_valid_steps, new_last_valid_step)
+
+				# 0: torch.tensor([0.2, 0.4, 0.5, 0.6, 0.8, 1.0], device=device),
+				# 1: torch.tensor([2, 3, 4, 5], device=device),
+				# 2: torch.tensor([0.2, 0.4, 0.6, 0.8, 1.0], device=device),
+				# 3: torch.tensor([0.005, 0.001, 0.05, 0.01, 0.1], device=device)
 
 				mean_reward += reward
 				num_reward_added += 1
@@ -219,83 +225,83 @@ class RLIO_TD3_BC(object):
 
 		return mean_reward
 
-	def validation_old(self):
+	# def validation_old(self):
 
-		self.pointnet.eval()
+	# 	self.pointnet.eval()
 		
-		num_points = self.data_converter.num_points_per_scan
+	# 	num_points = self.data_converter.num_points_per_scan
 		
-		mean_error = 0
-		num_error_added = 0
+	# 	mean_error = 0
+	# 	num_error_added = 0
 
-		sampled_traj_name_pairs = self.data_converter.random_select_trajectory()
+	# 	sampled_traj_name_pairs = self.data_converter.random_select_trajectory()
 
-		for exp_dir, _ in sampled_traj_name_pairs:
-			frames_path = os.path.join(self.data_converter.base_path, exp_dir,'RLIO_1122test/LiDARs/Hesai')
-			ours_path = os.path.join(self.data_converter.base_path, exp_dir, 'RLIO_1122test', 'Hesai', 'ours')
+	# 	for exp_dir, _ in sampled_traj_name_pairs:
+	# 		frames_path = os.path.join(self.data_converter.base_path, exp_dir,'RLIO_1122test/LiDARs/Hesai')
+	# 		ours_path = os.path.join(self.data_converter.base_path, exp_dir, 'RLIO_1122test', 'Hesai', 'ours')
 
-			# select 10 steps
-			selected_steps = random.sample(range(len(self.data_converter.pcd_name_dict[exp_dir])), 10)
+	# 		# select 10 steps
+	# 		selected_steps = random.sample(range(len(self.data_converter.pcd_name_dict[exp_dir])), 10)
 
-			for t in selected_steps:
-				path_to_pcd = os.path.join(frames_path, self.data_converter.pcd_name_dict[exp_dir][t])
-				pcd = o3d.io.read_point_cloud(path_to_pcd)
-				points = np.asarray(pcd.points)
+	# 		for t in selected_steps:
+	# 			path_to_pcd = os.path.join(frames_path, self.data_converter.pcd_name_dict[exp_dir][t])
+	# 			pcd = o3d.io.read_point_cloud(path_to_pcd)
+	# 			points = np.asarray(pcd.points)
 
-				if points.shape[0] > num_points:
-					indices = np.random.choice(points.shape[0], num_points, replace=False)
-					sampled_points = points[indices]
-				else:
-					indices = np.random.choice(points.shape[0], num_points, replace=True)
-					sampled_points = points[indices]
+	# 			if points.shape[0] > num_points:
+	# 				indices = np.random.choice(points.shape[0], num_points, replace=False)
+	# 				sampled_points = points[indices]
+	# 			else:
+	# 				indices = np.random.choice(points.shape[0], num_points, replace=True)
+	# 				sampled_points = points[indices]
 
-				processed_points = self.data_converter.pointnet_preprocess(sampled_points.reshape(1, num_points, 3))
-				processed_points_tensor = processed_points.to(device).clone().detach()
+	# 			processed_points = self.data_converter.pointnet_preprocess(sampled_points.reshape(1, num_points, 3))
+	# 			processed_points_tensor = processed_points.to(device).clone().detach()
 
 
-				with torch.no_grad():
+	# 			with torch.no_grad():
 
-					state, _ = self.pointnet(processed_points_tensor)
-					pi = self.actor(state)
-				disc_pi = self.discretize_action(pi)
-				disc_pi = disc_pi[0]
+	# 				state, _ = self.pointnet(processed_points_tensor)
+	# 				pi = self.actor(state)
+	# 			disc_pi = self.discretize_action(pi)
+	# 			disc_pi = disc_pi[0]
 
-				# sub_dir =str(disc_pi[0]) + '_' + str(disc_pi[1]) + '_' + str(disc_pi[2]) + '_' + str(disc_pi[3])
-				sub_dir = f"{disc_pi[0].item():g}_{disc_pi[1].item():.0f}_{disc_pi[2].item():g}_{disc_pi[3].item():g}"
+	# 			# sub_dir =str(disc_pi[0]) + '_' + str(disc_pi[1]) + '_' + str(disc_pi[2]) + '_' + str(disc_pi[3])
+	# 			sub_dir = f"{disc_pi[0].item():g}_{disc_pi[1].item():.0f}_{disc_pi[2].item():g}_{disc_pi[3].item():g}"
 
-				# Handle diverges
-				status_file = os.path.join(ours_path, sub_dir, 'status.txt')
-				if os.path.exists(status_file):
-					with open(status_file, 'r') as f:
-						content = f.read().strip()
-					if content == "Finished":
-						# print(sub_dir)
-						valid_indices, errors = self.data_converter.preprocess_errors(exp_dir, sub_dir)
+	# 			# Handle diverges
+	# 			status_file = os.path.join(ours_path, sub_dir, 'status.txt')
+	# 			if os.path.exists(status_file):
+	# 				with open(status_file, 'r') as f:
+	# 					content = f.read().strip()
+	# 				if content == "Finished":
+	# 					# print(sub_dir)
+	# 					valid_indices, errors = self.data_converter.preprocess_errors(exp_dir, sub_dir)
 
-						valid_indices = np.array(valid_indices)  # Ensure valid_indices is a numpy array
-						closest_index = np.abs(valid_indices - t).argmin()
+	# 					valid_indices = np.array(valid_indices)  # Ensure valid_indices is a numpy array
+	# 					closest_index = np.abs(valid_indices - t).argmin()
 
-						error = errors[closest_index]
-						num_error_added += 1
-					else:
-						# print("Diverged")
-						error = 0
-				else:
-					# print("No status file")
-					error = 0
+	# 					error = errors[closest_index]
+	# 					num_error_added += 1
+	# 				else:
+	# 					# print("Diverged")
+	# 					error = 0
+	# 			else:
+	# 				# print("No status file")
+	# 				error = 0
 
-				mean_error += error
+	# 			mean_error += error
 
-		self.pointnet.train()
+	# 	self.pointnet.train()
 
-		if num_error_added == 0:
-			mean_error = 1
-		else:
-			mean_error /= num_error_added
-		num_error_added = 0
+	# 	if num_error_added == 0:
+	# 		mean_error = 1
+	# 	else:
+	# 		mean_error /= num_error_added
+	# 	num_error_added = 0
 
-		print(mean_error)
-		return mean_error
+	# 	print(mean_error)
+	# 	return mean_error
 
 
 	def train(self, add_critic_pointnet):

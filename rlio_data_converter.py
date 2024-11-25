@@ -37,43 +37,61 @@ class RLIODataConverter:
             self.pcd_name_dict[exp_dir] = pcd_names
 
 
+    # def random_select_trajectory(self):
+    #     exp_dirs = [d for d in os.listdir(self.base_path) if d.startswith('exp') and os.path.isdir(os.path.join(self.base_path, d))]
+    #     seleced_exp_dirs = random.sample(exp_dirs, self.num_ids)
+
+    #     valid_pairs = []
+
+    #     for exp_dir in seleced_exp_dirs:
+    #         ours_path = os.path.join(self.base_path, exp_dir, 'RLIO_1122test', 'Hesai', 'ours')
+
+    #         if os.path.exists(ours_path):
+    #             sub_dirs = [d for d in os.listdir(ours_path) if os.path.isdir(os.path.join(ours_path, d))]
+    #             selected_sub_dirs = random.sample(sub_dirs, self.num_trajs)
+    #             for sub_dir in selected_sub_dirs:
+
+    #                 poses_dir = os.path.join(ours_path, sub_dir, 'poses.txt')
+    #                 valid_pairs.append((exp_dir, sub_dir))
+
+    #     return valid_pairs
+    
     def random_select_trajectory(self):
         exp_dirs = [d for d in os.listdir(self.base_path) if d.startswith('exp') and os.path.isdir(os.path.join(self.base_path, d))]
-        seleced_exp_dirs = random.sample(exp_dirs, self.num_ids)
+        selected_exp_dirs = random.sample(exp_dirs, self.num_ids)
 
         valid_pairs = []
 
-        for exp_dir in seleced_exp_dirs:
+        for exp_dir in selected_exp_dirs:
             ours_path = os.path.join(self.base_path, exp_dir, 'RLIO_1122test', 'Hesai', 'ours')
 
-        if os.path.exists(ours_path):
-            sub_dirs = [d for d in os.listdir(ours_path) if os.path.isdir(os.path.join(ours_path, d))]
-            
-            selected_sub_dirs = []
-            attempts = 0
-            max_attempts = 10 
-            while len(selected_sub_dirs) < self.num_trajs and attempts < max_attempts:
-                remaining_sub_dirs = list(set(sub_dirs) - set(selected_sub_dirs))
-                if not remaining_sub_dirs:
-                    break
-                to_sample = min(len(remaining_sub_dirs), self.num_trajs - len(selected_sub_dirs))
-                sampled_dirs = random.sample(remaining_sub_dirs, to_sample)
+            if os.path.exists(ours_path):
+                sub_dirs = [d for d in os.listdir(ours_path) if os.path.isdir(os.path.join(ours_path, d))]
+                sub_dirs_sampled = []
 
-                for sub_dir in sampled_dirs:
-                    status_file = os.path.join(ours_path, sub_dir, 'status.txt')
-                    if os.path.exists(status_file):
-                        with open(status_file, 'r') as f:
-                            content = f.read().strip()
-                        if content == "Finished":
-                            selected_sub_dirs.append(sub_dir)
+                while len(sub_dirs_sampled) < self.num_trajs:
+                    # Remaining sub_dirs to sample from
+                    remaining_sub_dirs = list(set(sub_dirs) - set(sub_dirs_sampled))
+                    
+                    if not remaining_sub_dirs:
+                        print("[ERROR] the number of sub_dirs is less than the number of trajs")
+                        break
 
-                attempts += 1
+                    sub_dir = random.choice(remaining_sub_dirs)
+                    poses_path = os.path.join(ours_path, sub_dir, 'poses.txt')
 
-            for sub_dir in selected_sub_dirs:
-                valid_pairs.append((exp_dir, sub_dir))
+                    if os.path.exists(poses_path):
+                        # Check if poses.txt has enough lines
+                        with open(poses_path, 'r') as f:
+                            line_count = sum(1 for _ in f)
+                        
+                        if line_count >= self.num_steps*2:
+                            valid_pairs.append((exp_dir, sub_dir))
+                            sub_dirs_sampled.append(sub_dir)
 
         return valid_pairs
-    
+
+
     def restore_path(self, exp_dir, sub_dir):
         # restored_path = os.path.join( self.base_path, exp_dir, 'RLIO1122test_all_pvlio', 'Hesai', 'ours', sub_dir)
         restored_path = os.path.join( self.base_path, exp_dir, 'RLIO_1122test', 'Hesai', 'ours', sub_dir)
@@ -231,14 +249,12 @@ class RLIODataConverter:
 
         if os.path.exists(errors_zip):
             with zipfile.ZipFile(errors_zip, 'r') as zip_ref:
-
                 if self.time_array_name in zip_ref.namelist():
                     with zip_ref.open(self.time_array_name) as file:
                         time_array = np.load(BytesIO(file.read()))
-                        time_array = time_array[:-1]
+                        time_array = time_array[:-1]  # delete last element (because the error is calculated as relative manner)
 
             selected_steps = np.array([np.argmin(np.abs(poses_times - time)) for time in time_array])
-
         else:
             print(f"No rpe_trans error zip file: {errors_zip}")
 
@@ -255,7 +271,9 @@ class RLIODataConverter:
     def get_rewards(self, exp_dir, sub_dir, selected_steps, valid_steps, last_valid_step):
         # sub_dir: action parameters
         restored_path = self.restore_path(exp_dir, sub_dir)
-        errors_zip = os.path.join(restored_path, 'errors', 'rpe_trans.zip')
+        trans_errors_zip = os.path.join(restored_path, 'errors', 'rpe_trans.zip')
+        rot_errors_zip = os.path.join(restored_path, 'errors', 'rpe_rot.zip')
+
 
         rewards = []
 
@@ -267,13 +285,11 @@ class RLIODataConverter:
                 idx_of_current_step_in_valid_steps = np.where(valid_steps == current_step)[0][0]
                 # idx_of_next_step_in_valid_steps = idx_of_current_step_in_valid_steps + 1
 
-                if os.path.exists(errors_zip):
-                    with zipfile.ZipFile(errors_zip, 'r') as zip_ref:
+                if os.path.exists(trans_errors_zip) and os.path.exists(rot_errors_zip):
+                    with zipfile.ZipFile(trans_errors_zip, 'r') as zip_ref:
                         if self.error_array_name in zip_ref.namelist():
                             with zip_ref.open(self.error_array_name) as file:
-                                error_array = np.load(BytesIO(file.read()))
-
-                                # error = error_array[idx_of_next_step_in_valid_steps]
+                                error_array = np.load(BytesIO(file.read()))  # print(error_array.shape, valid_steps.shape) -> same : okay
                                 error = error_array[idx_of_current_step_in_valid_steps]
 
                                 rewards.append(self.calculate_reward(error))
@@ -282,12 +298,13 @@ class RLIODataConverter:
                             rewards.append(-1)
 
                 else: # diverge -> penalty largely
+                    print("No error in the zip file, path : ", trans_errors_zip)
                     rewards.append(-1)
         
         return rewards
     
 
-    def _get_reward(self, exp_dir, sub_dir, step, valid_steps, last_valid_step):
+    def _get_reward_for_valid(self, exp_dir, sub_dir, current_step, valid_steps, last_valid_step):
         """
         get a single reward for a single step (for the validation only!!!)
         """
@@ -298,29 +315,31 @@ class RLIODataConverter:
 
         # rewards = []
 
-        current_step = step
-
         if current_step == last_valid_step:
             reward = 0
         else:
-            idx_of_current_step_in_valid_steps = np.where(valid_steps == current_step)[0][0]
-            # idx_of_next_step_in_valid_steps = idx_of_current_step_in_valid_steps + 1
-
+            idx_of_current_step_in_valid_steps = np.where(valid_steps == current_step)[0]
+            
+            if len(idx_of_current_step_in_valid_steps) == 0:
+                # When it already diverged
+                reward = -1
+                return reward
+            
             if os.path.exists(errors_zip):
                 with zipfile.ZipFile(errors_zip, 'r') as zip_ref:
                     if self.error_array_name in zip_ref.namelist():
                         with zip_ref.open(self.error_array_name) as file:
                             error_array = np.load(BytesIO(file.read()))
-
-                            # error = error_array[idx_of_next_step_in_valid_steps]
                             error = error_array[idx_of_current_step_in_valid_steps]
-
-                            reward = self.calculate_reward(error)
+                            reward = self.calculate_reward(error)[0]
 
                     else: # maybe not called
+
+                        print("No error in zip file")
                         reward = -1
 
             else: # diverge -> penalty largely
+                print("No zip file in ", restored_path)
                 reward = -1
         
         return reward
@@ -328,12 +347,13 @@ class RLIODataConverter:
     def preprocess_trajectory(self):
         sampled_traj_name_pairs = self.random_select_trajectory()
         for exp_dir, sub_dir in sampled_traj_name_pairs:
-            # Note: sub_dir itself is the action parameters
 
             # get a_t
             params = self.sub_dir_to_param(sub_dir) # action parameters
 
             valid_steps = self.get_valid_idices(exp_dir, sub_dir)  # Note: when we aquire pcd, it must pass through the self.pcd_name_dict
+            # print(valid_steps)
+            
             last_valid_step = valid_steps[-1]
             selected_steps = self.sample_steps(valid_steps)
 
