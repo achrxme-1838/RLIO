@@ -236,19 +236,22 @@ class RLIO_TD3_BC(object):
 						closest_index = np.abs(valid_indices - t).argmin()
 
 						error = errors[closest_index]
+						num_error_added += 1
 					else:
 						# print("Diverged")
-						error = 100
-
+						error = 0
 				else:
-					print("No status file")
+					# print("No status file")
+					error = 0
 
-				num_error_added += 1
 				mean_error += error
 
 		self.pointnet.train()
 
-		mean_error /= num_error_added
+		if num_error_added == 0:
+			mean_error = 1
+		else:
+			mean_error /= num_error_added
 		num_error_added = 0
 
 		print(mean_error)

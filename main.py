@@ -41,7 +41,7 @@ def main():
 	action_dim = 4 # num params to tune
 
 	# Training related
-	max_timesteps = 500
+	max_timesteps = 300
 	num_epochs = 4 # 4
 	mini_batch_size = 64 #64 #256 # 64 # 512
 
@@ -64,13 +64,17 @@ def main():
 	learning_rate = 3e-4 # 3e-4
 
 	use_val = True
-	val_freq = 10
+	val_freq = 5
 
 	if WANDB_SWEEP:
 		learning_rate = wandb.config.learning_rate
 		state_dim = wandb.config.state_dim
 		tau = wandb.config.tau
-		alpha = wandb.config.alpha	
+		alpha = wandb.config.alpha
+		discount = wandb.config.discount
+
+		policy_noise = wandb.config.policy_noise
+		policy_freq	= wandb.config.policy_freq
 
 	add_critic_pointnet = False
 
@@ -101,6 +105,7 @@ def main():
 										num_steps=num_steps,
 										num_points_per_scan=num_points_per_scan)	
 
+	mean_valid_error = 0.0
 
 	for it in range(int(max_timesteps)):
 
@@ -113,10 +118,6 @@ def main():
 
 		mean_reward, mean_actor_loss, mean_critic_loss, mean_target_Q, mean_Q_error = policy.train(add_critic_pointnet)
 
-		if WANDB_SWEEP:
-			score =  objective(mean_target_Q)
-			log_wandb(locals(), score)
-
 		stop = time.time()
 		preprocess_time = preprocess_stop - start
 		train_time = stop - preprocess_stop
@@ -125,11 +126,20 @@ def main():
 		print(f"it : {it} total_time : {total_time}s, pre_time : {preprocess_time}s, train_time : {train_time}s")
 
 		if use_val and it % val_freq == 0:
-			policy.validation()
+			mean_valid_error = policy.validation()
+		# else:
+		# 	mean_valid_error = 0.0
 
 
 		if WANDB:
 			log_wandb(locals())
+
+		if WANDB_SWEEP:
+			score = - 100 * mean_valid_error
+			if score <= -1:
+				score = -1
+
+			log_wandb(locals(), score)
 
 		if save_model and it % save_interval == 0:
 			path = save_path + f"/{it}"
@@ -151,6 +161,8 @@ def log_wandb(locs, score=None):
 	wandb_dict['Loss/mean_critic_loss'] = locs.get("mean_critic_loss", 0.0)	
 	wandb_dict['Loss/mean_target_Q'] = locs.get("mean_target_Q", 0.0)
 	wandb_dict['Loss/mean_Q_error'] = locs.get("mean_Q_error", 0.0)
+
+	wandb_dict['Loss/mean_valid_error'] = locs.get("mean_valid_error", 0.0)
 
 	wandb_dict['Performance/preprocess_time'] = locs.get("preprocess_time", 0.0)
 	wandb_dict['Performance/train_time'] = locs.get("train_time", 0.0)
@@ -179,13 +191,17 @@ if __name__ == "__main__":
 	if WANDB_SWEEP:
 		
 		sweep_configuration = {
-			"method": "random",
+			"method": "random",  # "bayes"
 			"metric": {"goal": "maximize", "name": "score"},
 			"parameters": {
 				"learning_rate": {"max": 1e-3, "min": 1e-5},
 				"state_dim": {"values": [32, 64, 128]},
 				"tau": {"max":0.1, "min":0.0001},
 				"alpha": {"max": 10.0, "min": 0.25},
+				"discount": {"values": [0.99, 0.975, 0.95]},
+
+				"policy_noise": {"values": [0.1, 0.2, 0.3]},
+				"policy_freq": {"values": [1, 2, 4]},
 			}
 		}
 
