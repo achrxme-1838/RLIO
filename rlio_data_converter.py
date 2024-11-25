@@ -103,17 +103,30 @@ class RLIODataConverter:
                         time_array = time_array[:-1]
                     # np.set_printoptions(suppress=True, precision=20, formatter={'float': '{:.10f}'.format})
 
-            selected_indices = np.array([np.argmin(np.abs(poses_times - time)) for time in time_array])
+            selected_steps = np.array([np.argmin(np.abs(poses_times - time)) for time in time_array])
             errors = error_array
 
         else:
             print(f"No rpe_trans error zip file: {errors_zip}")
 
-        # print(selected_indices)
+        # print(selected_steps)
 
-        return selected_indices, errors
+        return selected_steps, errors
+    
+    def _sample_for_fixed_num_points(self, path_to_pcd):
+        pcd = o3d.io.read_point_cloud(path_to_pcd)
+        points = np.asarray(pcd.points)
 
-    def fixed_num_sample_points(self, exp_dir, sub_dir, selected_indices, num_points=1024):
+        if points.shape[0] > self.num_points_per_scan:
+            indices = np.random.choice(points.shape[0], self.num_points_per_scan, replace=False)
+            sampled_points = points[indices]
+        else:
+            indices = np.random.choice(points.shape[0], self.num_points_per_scan, replace=True)
+            sampled_points = points[indices]
+
+        return sampled_points
+
+    def fixed_num_sample_points(self, exp_dir, selected_steps, valid_steps, last_valid_step):
         """
         To make the number of points fixed, it randomly samples points from each frame.
         output: 
@@ -125,47 +138,46 @@ class RLIODataConverter:
 
         points_in_this_traj = []
         next_points_in_this_traj = []
-        done = [] 
+        done = []
 
-        for i in selected_indices:
-            path_to_pcd = os.path.join(frames_path, self.pcd_name_dict[exp_dir][i])
-            path_to_next_pcd = os.path.join(frames_path, self.pcd_name_dict[exp_dir][i+1])
+        # print(valid_steps.shape) 
+        # alid_indices.shape: # of GT steps, valid_steps[t] -> incex of the real time in the poses.txt (= pcd file index)
 
-            # print(i, path_to_pcd)
-            if os.path.exists(path_to_pcd):
-                pcd = o3d.io.read_point_cloud(path_to_pcd)
-                points = np.asarray(pcd.points)
+        for current_step in selected_steps:
 
-                if points.shape[0] > num_points:
-                    indices = np.random.choice(points.shape[0], num_points, replace=False)
-                    sampled_points = points[indices]
+            if current_step != last_valid_step:
+
+                idx_of_current_step_in_valid_steps = np.where(valid_steps == current_step)[0][0]
+                next_step = valid_steps[idx_of_current_step_in_valid_steps + 1]
+
+                path_to_pcd = os.path.join(frames_path, self.pcd_name_dict[exp_dir][current_step])
+                path_to_next_pcd = os.path.join(frames_path, self.pcd_name_dict[exp_dir][next_step])
+
+                if os.path.exists(path_to_pcd):
+                    sampled_points = self._sample_for_fixed_num_points(path_to_pcd)
+                    points_in_this_traj.append(sampled_points)
                 else:
-                    indices = np.random.choice(points.shape[0], num_points, replace=True)
-                    sampled_points = points[indices]
+                    print(f"[ERROR] PCD File not found: {path_to_pcd}")
 
-                points_in_this_traj.append(sampled_points)
-            else:
-                print(f"PCD File not found: {path_to_pcd}")
-
-            if os.path.exists(path_to_pcd) and os.path.exists(path_to_next_pcd):
-                next_pcd = o3d.io.read_point_cloud(path_to_next_pcd)
-                next_points = np.asarray(next_pcd.points)
-
-                if next_points.shape[0] > num_points:
-                    indices = np.random.choice(next_points.shape[0], num_points, replace=False)
-                    sampled_points = next_points[indices]
+                if os.path.exists(path_to_pcd) and os.path.exists(path_to_next_pcd):
+                    next_sampled_points = self._sample_for_fixed_num_points(path_to_next_pcd)
+                    next_points_in_this_traj.append(next_sampled_points)
                 else:
-                    indices = np.random.choice(next_points.shape[0], num_points, replace=True)
-                    sampled_points = next_points[indices]
+                    print(f"[ERROR] Next PCD File not found: {path_to_next_pcd}")
 
-                next_points_in_this_traj.append(sampled_points)
                 done.append(False)
-            elif os.path.exists(path_to_pcd) and not os.path.exists(path_to_next_pcd):
-                sampled_points = np.zeros((num_points, 3))
+            else:  # Last state of each trajectory
+
+                path_to_pcd = os.path.join(frames_path, self.pcd_name_dict[exp_dir][current_step])
+
+                if os.path.exists(path_to_pcd):
+                    sampled_points = self._sample_for_fixed_num_points(path_to_pcd)
+                    points_in_this_traj.append(sampled_points)
+                else:
+                    print(f"[ERROR] PCD File not found: {path_to_pcd}")
+                sampled_points = np.zeros((self.num_points_per_scan, 3))
                 next_points_in_this_traj.append(sampled_points)
                 done.append(True)
-            else:
-                print(f"Next PCD File not found: {path_to_pcd}")       
 
         return np.array(points_in_this_traj), np.array(next_points_in_this_traj), np.array(done)  # (#frames, 1024(#points), 3)
     
@@ -186,8 +198,8 @@ class RLIODataConverter:
 
         return points
     
-    def delete_invalid_errors(self, errors, valid_indices):
-        return errors[valid_indices]
+    def delete_invalid_errors(self, errors, valid_steps):
+        return errors[valid_steps]
     
     def sub_dir_to_param(self, sub_dir):
 
@@ -195,44 +207,140 @@ class RLIODataConverter:
         params = [float(p) for p in params_str]
         return np.array(params)
 
-    def calculate_reward(self, errors):
-        coef = 50.0 #100.0
+    # def calculate_reward(self, errors):
+    #     coef = 50.0 #100.0
 
-        # print((1-coef*errors).mean())
-        return 1-coef*errors
+    #     # print((1-coef*errors).mean())
+    #     return 1-coef*errors
     
-    def select_steps(self, valid_indices, errors):
+    def select_steps(self, valid_steps, errors):
         """
         Select the steps to be used for training.
         """
-        selections = random.sample(range(len(valid_indices)), self.num_steps)
-        return valid_indices[selections], errors[selections]
+        selections = random.sample(range(len(valid_steps)), self.num_steps)
+        return valid_steps[selections], errors[selections]
+    
+    def get_valid_idices(self, exp_dir, sub_dir):
+        restored_path = self.restore_path(exp_dir, sub_dir)
 
+        poses_txt = os.path.join(restored_path, 'poses.txt')
+        poses = np.loadtxt(poses_txt)  # (time, x, y, z, ...)
+        poses_times = poses[:, 0]
 
+        errors_zip = os.path.join(restored_path, 'errors', 'rpe_trans.zip')
+
+        if os.path.exists(errors_zip):
+            with zipfile.ZipFile(errors_zip, 'r') as zip_ref:
+
+                if self.time_array_name in zip_ref.namelist():
+                    with zip_ref.open(self.time_array_name) as file:
+                        time_array = np.load(BytesIO(file.read()))
+                        time_array = time_array[:-1]
+
+            selected_steps = np.array([np.argmin(np.abs(poses_times - time)) for time in time_array])
+
+        else:
+            print(f"No rpe_trans error zip file: {errors_zip}")
+
+        return selected_steps  # Usage: selected_steps[t] -> incex of the real time in the poses.txt (= pcd file index)
+
+    def sample_steps(self, valid_steps):
+        selections = random.sample(range(len(valid_steps)), self.num_steps)
+        return valid_steps[selections]
+    
+    def calculate_reward(self, error):
+        coef = 50.0
+        return 1-coef*error
+
+    def get_rewards(self, exp_dir, sub_dir, selected_steps, valid_steps, last_valid_step):
+        # sub_dir: action parameters
+        restored_path = self.restore_path(exp_dir, sub_dir)
+        errors_zip = os.path.join(restored_path, 'errors', 'rpe_trans.zip')
+
+        rewards = []
+
+        for current_step in selected_steps:
+
+            if current_step == last_valid_step:
+                rewards.append(0)
+            else:
+                idx_of_current_step_in_valid_steps = np.where(valid_steps == current_step)[0][0]
+                idx_of_next_step_in_valid_steps = idx_of_current_step_in_valid_steps + 1
+
+                if os.path.exists(errors_zip):
+                    with zipfile.ZipFile(errors_zip, 'r') as zip_ref:
+                        if self.error_array_name in zip_ref.namelist():
+                            with zip_ref.open(self.error_array_name) as file:
+                                error_array = np.load(BytesIO(file.read()))
+
+                                error = error_array[idx_of_next_step_in_valid_steps]
+                                rewards.append(self.calculate_reward(error))
+
+                        else: # maybe not called
+                            rewards.append(-10)
+
+                else: # diverge -> penalty largely
+                    rewards.append(-10)
+        
+        return rewards
+    
+
+    def _get_reward(self, exp_dir, sub_dir, step, valid_steps, last_valid_step):
+        """
+        get a single reward for a single step (for the validation only!!!)
+        """
+
+        # sub_dir: action parameters
+        restored_path = self.restore_path(exp_dir, sub_dir)
+        errors_zip = os.path.join(restored_path, 'errors', 'rpe_trans.zip')
+
+        # rewards = []
+
+        current_step = step
+
+        if current_step == last_valid_step:
+            reward = 0
+        else:
+            idx_of_current_step_in_valid_steps = np.where(valid_steps == current_step)[0][0]
+            idx_of_next_step_in_valid_steps = idx_of_current_step_in_valid_steps + 1
+
+            if os.path.exists(errors_zip):
+                with zipfile.ZipFile(errors_zip, 'r') as zip_ref:
+                    if self.error_array_name in zip_ref.namelist():
+                        with zip_ref.open(self.error_array_name) as file:
+                            error_array = np.load(BytesIO(file.read()))
+
+                            error = error_array[idx_of_next_step_in_valid_steps]
+                            reward = self.calculate_reward(error)
+
+                    else: # maybe not called
+                        reward = -10
+
+            else: # diverge -> penalty largely
+                reward = -10
+        
+        return reward
+    
     def preprocess_trajectory(self):
         sampled_traj_name_pairs = self.random_select_trajectory()
         for exp_dir, sub_dir in sampled_traj_name_pairs:
+            # Note: sub_dir itself is the action parameters
 
-            # print(f"Processing: {exp_dir}/{sub_dir}")
-
+            # get a_t
             params = self.sub_dir_to_param(sub_dir) # action parameters
 
-            valid_indices, errors = self.preprocess_errors(exp_dir, sub_dir)
-            selected_indices, selected_errors = self.select_steps(valid_indices, errors)
-            
-            # start = time.time()
-            points_in_this_traj, next_points_in_this_traj, done = self.fixed_num_sample_points(exp_dir, sub_dir, selected_indices, num_points=self.num_points_per_scan)
-            # end = time.time()
+            valid_steps = self.get_valid_idices(exp_dir, sub_dir)  # Note: when we aquire pcd, it must pass through the self.pcd_name_dict
+            last_valid_step = valid_steps[-1]
+            selected_steps = self.sample_steps(valid_steps)
 
+            # get s_t, s_t+1, done (Note: s_t -> s_t+1 is deterministic in this OFF RL formulation)
+            points_in_this_traj, next_points_in_this_traj, done = self.fixed_num_sample_points(exp_dir, selected_steps, valid_steps, last_valid_step)
             processed_points = self.pointnet_preprocess(points_in_this_traj)
             processed_next_points = self.pointnet_preprocess(next_points_in_this_traj)
-            
-            rewards = self.calculate_reward(selected_errors)
+
+            # get r_t+1
+            rewards = self.get_rewards(exp_dir, sub_dir, selected_steps, valid_steps, last_valid_step)
 
             self.rollout_storage.add_new_trajs_to_buffer(processed_points, processed_next_points, rewards, params, done)
-
-            # end = time.time()
-
-            # print(f"Time taken: {end-start}")
 
         

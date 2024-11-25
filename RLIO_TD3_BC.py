@@ -177,8 +177,49 @@ class RLIO_TD3_BC(object):
 			discretized_action[:, idx] = discrete_values[closest_indices]
 
 		return discretized_action
-
+	
 	def validation(self):
+		self.pointnet.eval()
+
+		mean_reward = 0
+		num_reward_added = 0
+
+
+		sampled_traj_name_pairs = self.data_converter.random_select_trajectory()
+		for exp_dir, sub_dir in sampled_traj_name_pairs:
+			valid_steps = self.data_converter.get_valid_idices(exp_dir, sub_dir) 
+			last_valid_step = valid_steps[-1]
+			selected_steps = self.data_converter.sample_steps(valid_steps)
+
+			points_in_this_traj, _, _ = self.data_converter.fixed_num_sample_points(exp_dir, selected_steps, valid_steps, last_valid_step) 
+			processed_points = self.data_converter.pointnet_preprocess(points_in_this_traj)
+			processed_points_tensor = processed_points.to(device).clone().detach()
+
+			# get action for each state
+			for i in range(len(selected_steps)):
+				processed_point = processed_points_tensor[i].unsqueeze(0)
+				step = selected_steps[i]
+
+				with torch.no_grad():
+					state, _ = self.pointnet(processed_point)
+					pi = self.actor(state)
+
+				disc_pi = self.discretize_action(pi)
+				disc_pi = disc_pi[0]
+
+				new_sub_dir = f"{disc_pi[0].item():g}_{disc_pi[1].item():.0f}_{disc_pi[2].item():g}_{disc_pi[3].item():g}"
+				reward = self.data_converter._get_reward(exp_dir, new_sub_dir, step, valid_steps, last_valid_step)
+
+				mean_reward += reward
+				num_reward_added += 1
+
+		mean_reward /= num_reward_added
+
+		self.pointnet.train()
+
+		return mean_reward
+
+	def validation_old(self):
 
 		self.pointnet.eval()
 		
@@ -217,7 +258,6 @@ class RLIO_TD3_BC(object):
 					state, _ = self.pointnet(processed_points_tensor)
 					pi = self.actor(state)
 				disc_pi = self.discretize_action(pi)
-
 				disc_pi = disc_pi[0]
 
 				# sub_dir =str(disc_pi[0]) + '_' + str(disc_pi[1]) + '_' + str(disc_pi[2]) + '_' + str(disc_pi[3])

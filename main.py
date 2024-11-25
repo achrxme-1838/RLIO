@@ -105,7 +105,7 @@ def main():
 										num_steps=num_steps,
 										num_points_per_scan=num_points_per_scan)	
 
-	mean_valid_error = 0.0
+	mean_reward_val = 0.0
 
 	for it in range(int(max_timesteps)):
 
@@ -126,7 +126,10 @@ def main():
 		print(f"it : {it} total_time : {total_time}s, pre_time : {preprocess_time}s, train_time : {train_time}s")
 
 		if use_val and it % val_freq == 0:
-			mean_valid_error = policy.validation()
+			mean_reward_val = policy.validation()
+
+			print(mean_reward_val)
+
 		# else:
 		# 	mean_valid_error = 0.0
 
@@ -135,9 +138,7 @@ def main():
 			log_wandb(locals())
 
 		if WANDB_SWEEP:
-			score = - 100 * mean_valid_error
-			if score <= -1:
-				score = -1
+			score =  mean_reward_val
 
 			log_wandb(locals(), score)
 
