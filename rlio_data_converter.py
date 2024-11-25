@@ -189,12 +189,18 @@ class RLIODataConverter:
         self.set_pcd_name_array_for_each_ids()
 
     #--------------------------------------------------
-
-    def restore_path(self, exp_dir, sub_dir):
+    # Those functions are for the out of parallel computation
+    def _restore_path(self, exp_dir, sub_dir):
+        """
+        for the out of parallel computation
+        """
         restored_path = os.path.join(self.base_path, exp_dir, 'RLIO_1122test', 'Hesai', 'ours', sub_dir)
         return restored_path
 
-    def sample_steps(self, valid_steps):
+    def _sample_steps(self, valid_steps):
+        """
+        for the out of parallel computation
+        """
         if len(valid_steps) >= self.num_steps:
             selections = random.sample(range(len(valid_steps)), self.num_steps)
             return valid_steps[selections]
@@ -202,7 +208,10 @@ class RLIODataConverter:
             print("[ERROR] Not enough valid steps to sample.")
             return valid_steps
 
-    def fixed_num_sample_points(self, exp_dir, selected_steps, valid_steps, last_valid_step):
+    def _fixed_num_sample_points(self, exp_dir, selected_steps, valid_steps, last_valid_step):
+        """
+        for the out of parallel computation
+        """
         frames_path = os.path.join(self.base_path, exp_dir, 'RLIO_1122test', 'LiDARs', 'Hesai')
 
         path_to_pcd_list = []
@@ -236,11 +245,9 @@ class RLIODataConverter:
 
         return points_in_this_traj, next_points_in_this_traj, done
 
-    def pointnet_preprocess(self, points):
+    def _pointnet_preprocess(self, points):
         """
-        Make the points compatible with PointNet input.
-        input: (#frames, num_points_per_scan, 3)
-        output: (#frames, 3, num_points_per_scan)
+        for the out of parallel computation
         """
         points = provider.random_point_dropout(points)
         points[:, :, 0:3] = provider.random_scale_point_cloud(points[:, :, 0:3])
@@ -249,7 +256,10 @@ class RLIODataConverter:
         return points
 
     def _get_reward_for_valid(self, exp_dir, sub_dir, current_step, valid_steps, last_valid_step):
-        restored_path = self.restore_path(exp_dir, sub_dir)
+        """
+        for the out of parallel computation
+        """
+        restored_path = self._restore_path(exp_dir, sub_dir)
         trans_errors_zip = os.path.join(restored_path, 'errors', 'rpe_trans.zip')
         rot_errors_zip = os.path.join(restored_path, 'errors', 'rpe_rot.zip')
 
@@ -282,17 +292,23 @@ class RLIODataConverter:
                         return -1
 
                 error = trans_error + rot_error
-                reward = self.calculate_reward(error)[0]
+                reward = self._calculate_reward(error)[0]
             else:
                 print(f"No zip file in {restored_path}")
                 reward = -1
         return reward
 
-    def calculate_reward(self, error):
+    def _calculate_reward(self, error):
+        """
+        for the out of parallel computation
+        """
         coef = 1.0
         return (1 - coef * error) * self.reward_scale
 
-    def get_valid_indices(self, exp_dir, sub_dir):
+    def _get_valid_indices(self, exp_dir, sub_dir):
+        """
+        for the out of parallel computation
+        """
         restored_path = os.path.join(self.base_path, exp_dir, 'RLIO_1122test', 'Hesai', 'ours', sub_dir)
         poses_txt = os.path.join(restored_path, 'poses.txt')
         poses = np.loadtxt(poses_txt)  # (time, x, y, z, ...)

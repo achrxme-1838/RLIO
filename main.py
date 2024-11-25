@@ -44,8 +44,8 @@ def main():
 	# Training related
 	max_timesteps = 1000
 	num_epochs = 4 # 4
-	mini_batch_size = 256 # 1024 #64 #256 # 64 # 512
-
+	mini_batch_size = 1024
+	
 	# TD3
 	discount = 0.99
 	tau = 0.005               
@@ -59,8 +59,8 @@ def main():
 	num_points_per_scan= 256 # 1024 # 512  # 1024
 
 	# (2, 16, 128)
-	num_ids = 1 		# exp01, exp02, ...
-	num_trajs = 4 		# = num actions
+	num_ids = 2 		# exp01, exp02, ...
+	num_trajs = 8 		# = num actions
 	num_steps = 128 #128		# 64 		# for each traj  -> full batch size = num_ids * num_trajs * num_steps
 
 	learning_rate = 3e-4 # 3e-4

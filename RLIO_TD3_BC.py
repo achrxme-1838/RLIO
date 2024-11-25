@@ -190,14 +190,18 @@ class RLIO_TD3_BC(object):
 		num_reward_added = 0
 
 		sampled_traj_name_pairs = self.data_converter.random_select_trajectory()
-		for exp_dir, sub_dir in sampled_traj_name_pairs:
-			valid_steps = self.data_converter.get_valid_indices(exp_dir, sub_dir) 
+		selected_pairs = random.sample(sampled_traj_name_pairs, min(10, len(sampled_traj_name_pairs)))
+
+		for exp_dir, sub_dir in selected_pairs:
+			valid_steps = self.data_converter._get_valid_indices(exp_dir, sub_dir) 
 
 			last_valid_step = valid_steps[-1]
-			selected_steps = self.data_converter.sample_steps(valid_steps)
+			_selected_steps = self.data_converter._sample_steps(valid_steps)
 
-			points_in_this_traj, _, _ = self.data_converter.fixed_num_sample_points(exp_dir, selected_steps, valid_steps, last_valid_step) 
-			processed_points = self.data_converter.pointnet_preprocess(points_in_this_traj)
+			selected_steps = np.array(random.sample(list(_selected_steps), min(10, len(_selected_steps))))
+
+			points_in_this_traj, _, _ = self.data_converter._fixed_num_sample_points(exp_dir, selected_steps, valid_steps, last_valid_step) 
+			processed_points = self.data_converter._pointnet_preprocess(points_in_this_traj)
 			processed_points_tensor = torch.tensor(processed_points, dtype=torch.float32).to(device).clone().detach()
 
 			# get action for each state
@@ -213,14 +217,9 @@ class RLIO_TD3_BC(object):
 				disc_pi = disc_pi[0]
 
 				new_sub_dir = f"{disc_pi[0].item():.1f}_{disc_pi[1].item():.0f}_{disc_pi[2].item():.1f}_{disc_pi[3].item():g}"
-				new_valid_steps = self.data_converter.get_valid_indices(exp_dir, new_sub_dir)
+				new_valid_steps = self.data_converter._get_valid_indices(exp_dir, new_sub_dir)
 				new_last_valid_step = new_valid_steps[-1]
 				reward = self.data_converter._get_reward_for_valid(exp_dir, new_sub_dir, step, new_valid_steps, new_last_valid_step)
-
-				# 0: torch.tensor([0.2, 0.4, 0.5, 0.6, 0.8, 1.0], device=device),
-				# 1: torch.tensor([2, 3, 4, 5], device=device),
-				# 2: torch.tensor([0.2, 0.4, 0.6, 0.8, 1.0], device=device),
-				# 3: torch.tensor([0.005, 0.001, 0.05, 0.01, 0.1], device=device)
 
 				mean_reward += reward
 				num_reward_added += 1
