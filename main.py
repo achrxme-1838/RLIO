@@ -174,8 +174,8 @@ def log_wandb(locs, score=None):
 	wandb.log(wandb_dict, step=locs['it'])
 	
 
-WANDB = True
-WANDB_SWEEP = True
+WANDB = False
+WANDB_SWEEP = False
 
 
 def objective(mean_target_Q):

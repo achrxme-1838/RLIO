@@ -265,7 +265,7 @@ class RLIODataConverter:
                 rewards.append(0)
             else:
                 idx_of_current_step_in_valid_steps = np.where(valid_steps == current_step)[0][0]
-                idx_of_next_step_in_valid_steps = idx_of_current_step_in_valid_steps + 1
+                # idx_of_next_step_in_valid_steps = idx_of_current_step_in_valid_steps + 1
 
                 if os.path.exists(errors_zip):
                     with zipfile.ZipFile(errors_zip, 'r') as zip_ref:
@@ -273,14 +273,16 @@ class RLIODataConverter:
                             with zip_ref.open(self.error_array_name) as file:
                                 error_array = np.load(BytesIO(file.read()))
 
-                                error = error_array[idx_of_next_step_in_valid_steps]
+                                # error = error_array[idx_of_next_step_in_valid_steps]
+                                error = error_array[idx_of_current_step_in_valid_steps]
+
                                 rewards.append(self.calculate_reward(error))
 
                         else: # maybe not called
-                            rewards.append(-10)
+                            rewards.append(-1)
 
                 else: # diverge -> penalty largely
-                    rewards.append(-10)
+                    rewards.append(-1)
         
         return rewards
     
@@ -310,14 +312,16 @@ class RLIODataConverter:
                         with zip_ref.open(self.error_array_name) as file:
                             error_array = np.load(BytesIO(file.read()))
 
-                            error = error_array[idx_of_next_step_in_valid_steps]
+                            # error = error_array[idx_of_next_step_in_valid_steps]
+                            error = error_array[idx_of_current_step_in_valid_steps]
+
                             reward = self.calculate_reward(error)
 
                     else: # maybe not called
-                        reward = -10
+                        reward = -1
 
             else: # diverge -> penalty largely
-                reward = -10
+                reward = -1
         
         return reward
     
@@ -338,7 +342,7 @@ class RLIODataConverter:
             processed_points = self.pointnet_preprocess(points_in_this_traj)
             processed_next_points = self.pointnet_preprocess(next_points_in_this_traj)
 
-            # get r_t+1
+            # get r_t (no r_t+1) (the goal is minimize current error, and the current error is calculated by the current action)
             rewards = self.get_rewards(exp_dir, sub_dir, selected_steps, valid_steps, last_valid_step)
 
             self.rollout_storage.add_new_trajs_to_buffer(processed_points, processed_next_points, rewards, params, done)
