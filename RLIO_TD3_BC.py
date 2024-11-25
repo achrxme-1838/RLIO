@@ -141,7 +141,9 @@ class RLIO_TD3_BC(object):
 									num_ids,				# exp01, exp02, ...
 									num_trajs,				# = num actions
 									num_steps,				# for each traj  -> full batch size = num_ids * num_trajs * num_steps
-									num_points_per_scan):
+									num_points_per_scan,
+									
+									reward_scale=1.0):
 
 		self.rollout_storage = rlio_rollout_stoage.RLIORolloutStorage(	mini_batch_size=mini_batch_size,
 																		num_epochs=num_epochs,
@@ -155,7 +157,9 @@ class RLIO_TD3_BC(object):
 																		num_ids=num_ids,
 																		num_trajs=num_trajs,
 																		num_steps=num_steps,
-																		num_points_per_scan=num_points_per_scan)
+																		num_points_per_scan=num_points_per_scan,
+																		
+																		reward_scale=reward_scale)
 		
 		self.data_converter.set_pcd_name_array_for_each_ids()
 		

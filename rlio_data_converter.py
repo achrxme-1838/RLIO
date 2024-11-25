@@ -13,7 +13,7 @@ import time
 
 class RLIODataConverter:
     def __init__(self, rollout_storage: rlio_rollout_stoage.RLIORolloutStorage, 
-                mini_batch_size, num_epochs, num_ids, num_trajs, num_steps, num_points_per_scan):
+                mini_batch_size, num_epochs, num_ids, num_trajs, num_steps, num_points_per_scan, reward_scale):
         self.base_path = "/home/lim/HILTI22" 
         self.num_trajs = num_trajs
         self.num_points_per_scan = num_points_per_scan
@@ -25,6 +25,8 @@ class RLIODataConverter:
         self.rollout_storage = rollout_storage
         self.error_array_name = 'error_array.npy'
         self.time_array_name = 'time.npy'
+
+        self.reward_sacle = reward_scale
 
     def set_pcd_name_array_for_each_ids(self):
         self.pcd_name_dict = {}
@@ -268,7 +270,7 @@ class RLIODataConverter:
         coef = 1.0
         
         # print(error, 1-coef*error)
-        return 1-coef*error
+        return (1-coef*error) * self.reward_sacle
 
     def get_rewards(self, exp_dir, sub_dir, selected_steps, valid_steps, last_valid_step):
         # sub_dir: action parameters
@@ -356,6 +358,8 @@ class RLIODataConverter:
     def preprocess_trajectory(self):
         sampled_traj_name_pairs = self.random_select_trajectory()
         for exp_dir, sub_dir in sampled_traj_name_pairs:
+
+            print(exp_dir, sub_dir)
 
             # get a_t
             params = self.sub_dir_to_param(sub_dir) # action parameters

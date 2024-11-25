@@ -24,7 +24,7 @@ def main():
 		if WANDB_SWEEP:
 			# run_name = f"lr_{wandb.config.learning_rate}_alpha_{wandb.config.alpha}_noise_{wandb.config.policy_noise}"
 			# run_name = f"lr_{wandb.config.learning_rate:.5f}"
-			run_name = f"lr_{wandb.config.learning_rate:.5f}_state_dim_{wandb.config.state_dim}_tau_{wandb.config.tau}_alpha_{wandb.config.alpha}"
+			run_name = f"lr_{wandb.config.learning_rate:.5f}_state_dim_{wandb.config.state_dim}"
 		else:
 			run_name = "default_run"
 
@@ -42,9 +42,9 @@ def main():
 	action_dim = 4 # num params to tune
 
 	# Training related
-	max_timesteps = 300
+	max_timesteps = 1000
 	num_epochs = 4 # 4
-	mini_batch_size = 64 #64 #256 # 64 # 512
+	mini_batch_size = 256 # 1024 #64 #256 # 64 # 512
 
 	# TD3
 	discount = 0.99
@@ -56,31 +56,34 @@ def main():
 	alpha = 2.5
 
 	# Batch size related
-	num_points_per_scan= 1024 # 512  # 1024
+	num_points_per_scan= 256 # 1024 # 512  # 1024
 
-	# (4, 4, 8)
-	num_ids = 4 		# exp01, exp02, ...
-	num_trajs =	4 		# = num actions
-	num_steps = 8 # 64 		# for each traj  -> full batch size = num_ids * num_trajs * num_steps
+	# (2, 16, 128)
+	num_ids = 2 		# exp01, exp02, ...
+	num_trajs = 16 		# = num actions
+	num_steps = 16 #128		# 64 		# for each traj  -> full batch size = num_ids * num_trajs * num_steps
 
 	learning_rate = 3e-4 # 3e-4
 
 	use_val = True
-	val_freq = 5 # 5
+	val_freq = 10 # 5
+	reward_scale = 1.0
 
 	if WANDB_SWEEP:
 		learning_rate = wandb.config.learning_rate
 		state_dim = wandb.config.state_dim
-		tau = wandb.config.tau
-		alpha = wandb.config.alpha
-		discount = wandb.config.discount
+		# tau = wandb.config.tau
+		# alpha = wandb.config.alpha
+		# discount = wandb.config.discount
 
-		policy_noise = wandb.config.policy_noise
-		policy_freq	= wandb.config.policy_freq
+		# policy_noise = wandb.config.policy_noise
+		# policy_freq	= wandb.config.policy_freq
 
-		num_ids = wandb.config.batch_cfg["param1"]		
-		num_trajs =	wandb.config.batch_cfg["param2"]			
-		num_steps = wandb.config.batch_cfg["param3"]		
+		# num_ids = wandb.config.batch_cfg["param1"]		
+		# num_trajs =	wandb.config.batch_cfg["param2"]			
+		# num_steps = wandb.config.batch_cfg["param3"]
+
+		reward_scale = wandb.config.reward_scale
 
 	add_critic_pointnet = False
 
@@ -109,7 +112,8 @@ def main():
 										num_ids=num_ids,
 										num_trajs=num_trajs,
 										num_steps=num_steps,
-										num_points_per_scan=num_points_per_scan)	
+										num_points_per_scan=num_points_per_scan,
+										reward_scale=reward_scale)	
 
 	mean_reward_val = 0.0
 
@@ -140,7 +144,7 @@ def main():
 			log_wandb(locals())
 
 		if WANDB_SWEEP:
-			score =  mean_reward_val - mean_reward
+			score =  (mean_reward_val - mean_reward)/reward_scale
 
 			log_wandb(locals(), score)
 
@@ -200,19 +204,20 @@ if __name__ == "__main__":
 			"parameters": {
 				"learning_rate": {"max": 1e-3, "min": 1e-5},
 				"state_dim": {"values": [32, 64, 128]},
-				"tau": {"max":0.1, "min":0.0001},
-				"alpha": {"max": 10.0, "min": 0.25},
-				"discount": {"values": [0.99, 0.975, 0.95]},
+				# "tau": {"max":0.1, "min":0.0001},
+				# "alpha": {"max": 10.0, "min": 0.25},
+				# "discount": {"values": [0.99, 0.975, 0.95]},
 
-				"policy_noise": {"values": [0.1, 0.2, 0.3]},
-				"policy_freq": {"values": [1, 2, 4]},
+				# "policy_noise": {"values": [0.1, 0.2, 0.3]},
+				# "policy_freq": {"values": [1, 2, 4]},
 
-				"batch_cfg": {
-					"values": [
-						{"param1": 4, "param2": 4, "param3": 8},
-						{"param1": 1, "param2": 16, "param3": 8},
-						]
-					},
+				# "batch_cfg": {
+				# 	"values": [
+				# 		{"param1": 4, "param2": 4, "param3": 8},
+				# 		{"param1": 1, "param2": 16, "param3": 8},
+				# 		]
+				# 	},
+				"reward_scale" : {"max":100.0, "min":1.0},
 			}
 		}
 
