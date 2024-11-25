@@ -304,7 +304,7 @@ class RLIODataConverter:
             reward = 0
         else:
             idx_of_current_step_in_valid_steps = np.where(valid_steps == current_step)[0][0]
-            idx_of_next_step_in_valid_steps = idx_of_current_step_in_valid_steps + 1
+            # idx_of_next_step_in_valid_steps = idx_of_current_step_in_valid_steps + 1
 
             if os.path.exists(errors_zip):
                 with zipfile.ZipFile(errors_zip, 'r') as zip_ref:
