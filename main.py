@@ -9,11 +9,8 @@ import RLIO_TD3_BC
 import wandb
 import time
 
-# TODO
-# 1. Error rpe trans + rot both
-
-WANDB = False
-WANDB_SWEEP = False
+WANDB = True
+WANDB_SWEEP = True
 
 
 def main():
@@ -61,7 +58,7 @@ def main():
 	# Batch size related
 	num_points_per_scan= 1024 # 512  # 1024
 
-	# (1, 16, 8)
+	# (4, 4, 8)
 	num_ids = 4 		# exp01, exp02, ...
 	num_trajs =	4 		# = num actions
 	num_steps = 8 # 64 		# for each traj  -> full batch size = num_ids * num_trajs * num_steps
@@ -69,7 +66,7 @@ def main():
 	learning_rate = 3e-4 # 3e-4
 
 	use_val = True
-	val_freq = 1 # 5
+	val_freq = 5 # 5
 
 	if WANDB_SWEEP:
 		learning_rate = wandb.config.learning_rate
@@ -80,6 +77,10 @@ def main():
 
 		policy_noise = wandb.config.policy_noise
 		policy_freq	= wandb.config.policy_freq
+
+		num_ids = wandb.config.batch_cfg["param1"]		
+		num_trajs =	wandb.config.batch_cfg["param2"]			
+		num_steps = wandb.config.batch_cfg["param3"]		
 
 	add_critic_pointnet = False
 
@@ -134,10 +135,6 @@ def main():
 			mean_reward_val = policy.validation()
 
 			print("mean_rew_val : ", mean_reward_val)
-
-		# else:
-		# 	mean_valid_error = 0.0
-
 
 		if WANDB:
 			log_wandb(locals())
@@ -198,7 +195,7 @@ if __name__ == "__main__":
 	if WANDB_SWEEP:
 		
 		sweep_configuration = {
-			"method": "random",  # "bayes"
+			"method": "random",	 # "random"  # "bayes"
 			"metric": {"goal": "maximize", "name": "score"},
 			"parameters": {
 				"learning_rate": {"max": 1e-3, "min": 1e-5},
@@ -209,6 +206,13 @@ if __name__ == "__main__":
 
 				"policy_noise": {"values": [0.1, 0.2, 0.3]},
 				"policy_freq": {"values": [1, 2, 4]},
+
+				"batch_cfg": {
+					"values": [
+						{"param1": 4, "param2": 4, "param3": 8},
+						{"param1": 1, "param2": 16, "param3": 8},
+						]
+					},
 			}
 		}
 

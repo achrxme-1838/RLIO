@@ -265,7 +265,9 @@ class RLIODataConverter:
         return valid_steps[selections]
     
     def calculate_reward(self, error):
-        coef = 50.0
+        coef = 1.0
+        
+        # print(error, 1-coef*error)
         return 1-coef*error
 
     def get_rewards(self, exp_dir, sub_dir, selected_steps, valid_steps, last_valid_step):
@@ -287,15 +289,19 @@ class RLIODataConverter:
 
                 if os.path.exists(trans_errors_zip) and os.path.exists(rot_errors_zip):
                     with zipfile.ZipFile(trans_errors_zip, 'r') as zip_ref:
-                        if self.error_array_name in zip_ref.namelist():
-                            with zip_ref.open(self.error_array_name) as file:
-                                error_array = np.load(BytesIO(file.read()))  # print(error_array.shape, valid_steps.shape) -> same : okay
-                                error = error_array[idx_of_current_step_in_valid_steps]
+                        with zip_ref.open(self.error_array_name) as file:
+                            error_array = np.load(BytesIO(file.read()))  # print(error_array.shape, valid_steps.shape) -> same : okay
+                            trans_error = error_array[idx_of_current_step_in_valid_steps]
 
-                                rewards.append(self.calculate_reward(error))
+                    with zipfile.ZipFile(rot_errors_zip, 'r') as zip_ref:
+                        with zip_ref.open(self.error_array_name) as file:
+                            error_array = np.load(BytesIO(file.read()))
+                            rot_error = error_array[idx_of_current_step_in_valid_steps]
 
-                        else: # maybe not called
-                            rewards.append(-1)
+                    error = trans_error + rot_error
+
+                    # print(trans_error, rot_error)
+                    rewards.append(self.calculate_reward(error))
 
                 else: # diverge -> penalty largely
                     print("No error in the zip file, path : ", trans_errors_zip)
@@ -311,7 +317,8 @@ class RLIODataConverter:
 
         # sub_dir: action parameters
         restored_path = self.restore_path(exp_dir, sub_dir)
-        errors_zip = os.path.join(restored_path, 'errors', 'rpe_trans.zip')
+        trans_errors_zip = os.path.join(restored_path, 'errors', 'rpe_trans.zip')
+        rot_errors_zip = os.path.join(restored_path, 'errors', 'rpe_rot.zip')
 
         # rewards = []
 
@@ -325,18 +332,20 @@ class RLIODataConverter:
                 reward = -1
                 return reward
             
-            if os.path.exists(errors_zip):
-                with zipfile.ZipFile(errors_zip, 'r') as zip_ref:
-                    if self.error_array_name in zip_ref.namelist():
-                        with zip_ref.open(self.error_array_name) as file:
-                            error_array = np.load(BytesIO(file.read()))
-                            error = error_array[idx_of_current_step_in_valid_steps]
-                            reward = self.calculate_reward(error)[0]
+            if os.path.exists(trans_errors_zip) and os.path.exists(rot_errors_zip):
+                with zipfile.ZipFile(trans_errors_zip, 'r') as zip_ref:
+                    with zip_ref.open(self.error_array_name) as file:
+                        error_array = np.load(BytesIO(file.read()))
+                        trans_error = error_array[idx_of_current_step_in_valid_steps]
 
-                    else: # maybe not called
+                with zipfile.ZipFile(rot_errors_zip, 'r') as zip_ref:
+                    with zip_ref.open(self.error_array_name) as file:
+                        error_array = np.load(BytesIO(file.read()))
+                        rot_error = error_array[idx_of_current_step_in_valid_steps]
 
-                        print("No error in zip file")
-                        reward = -1
+                error = trans_error + rot_error
+                reward = self.calculate_reward(error)[0]
+
 
             else: # diverge -> penalty largely
                 print("No zip file in ", restored_path)
