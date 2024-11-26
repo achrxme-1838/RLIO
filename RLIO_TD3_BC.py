@@ -189,14 +189,16 @@ class RLIO_TD3_BC(object):
 		num_reward_added = 0
 
 		sampled_traj_name_pairs = self.data_converter.random_select_trajectory()
-		sampled_traj_name_pairs = random.sample(sampled_traj_name_pairs, 10)
+		sample_traj_num = min(10, len(sampled_traj_name_pairs))
+		sampled_traj_name_pairs = random.sample(sampled_traj_name_pairs, sample_traj_num)
 
 		for exp_dir, sub_dir in sampled_traj_name_pairs:
 			valid_steps = self.data_converter.get_valid_idices(exp_dir, sub_dir) 
 			last_valid_step = valid_steps[-1]
 			# selected_steps = self.data_converter.sample_steps(valid_steps)
 
-			selected_steps = random.sample(list(valid_steps), 10)
+			sample_step_num = min(10, len(valid_steps))
+			selected_steps = random.sample(list(valid_steps), sample_step_num)
 
 			points_in_this_traj, _, _ = self.data_converter.load_points_from_all_pcd(exp_dir, selected_steps, valid_steps, last_valid_step) 
 			points_in_this_traj_np = points_in_this_traj.cpu().numpy()
@@ -247,6 +249,8 @@ class RLIO_TD3_BC(object):
 		mean_Q_error = 0
 
 		num_update = 0
+
+		actor_loss = torch.tensor(0.0)
 
 		generator= self.rollout_storage.mini_batch_generator()
 
@@ -317,8 +321,8 @@ class RLIO_TD3_BC(object):
 				for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
 					target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
-			else:
-				actor_loss = torch.tensor(0.0)
+			# else:
+			# 	actor_loss = torch.tensor(0.0)
 
 			mean_reward += reward.mean().item()
 			mean_actor_loss += actor_loss.mean().item()

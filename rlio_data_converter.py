@@ -110,7 +110,9 @@ class RLIODataConverter:
                         with open(poses_path, 'r') as f:
                             line_count = sum(1 for _ in f)
                         
+                        # if line_count >= self.num_steps+1:
                         if line_count >= self.num_steps*2:
+
                             valid_pairs.append((exp_dir, sub_dir))
                             sub_dirs_sampled.append(sub_dir)
 
@@ -251,7 +253,11 @@ class RLIODataConverter:
 
         poses_txt = os.path.join(restored_path, 'poses.txt')
         poses = np.loadtxt(poses_txt)  # (time, x, y, z, ...)
-        poses_times = poses[:, 0]
+        
+        if len(poses.shape) != 1:
+            poses_times = poses[:, 0]
+        else:
+            return np.array([0])            
 
         errors_zip = os.path.join(restored_path, 'errors', 'rpe_trans.zip')
 
@@ -306,7 +312,9 @@ class RLIODataConverter:
                             error_array = np.load(BytesIO(file.read()))
                             rot_error = error_array[idx_of_current_step_in_valid_steps]
 
-                    error = trans_error + rot_error
+                    # error = trans_error + rot_error
+                    error = trans_error
+
 
                     # print(trans_error, rot_error)
                     rewards.append(self.calculate_reward(error))
@@ -351,7 +359,9 @@ class RLIODataConverter:
                         error_array = np.load(BytesIO(file.read()))
                         rot_error = error_array[idx_of_current_step_in_valid_steps]
 
-                error = trans_error + rot_error
+                # error = trans_error + rot_error
+                error = trans_error
+
                 reward = self.calculate_reward(error)[0]
 
 
