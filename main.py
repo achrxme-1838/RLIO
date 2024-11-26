@@ -56,12 +56,12 @@ def main():
 	alpha = 2.5
 
 	# Batch size related
-	num_points_per_scan= 256 # 1024 # 512  # 1024
+	num_points_per_scan = 1024 # 256 # 1024 # 512  # 1024
 
 	# (2, 16, 128)
 	num_ids = 2 		# exp01, exp02, ...
 	num_trajs = 16 #16 		# = num actions
-	num_steps = 128 #128		# 64 		# for each traj  -> full batch size = num_ids * num_trajs * num_steps
+	num_steps = 32 # 128 #128		# 64 		# for each traj  -> full batch size = num_ids * num_trajs * num_steps
 
 	learning_rate = 3e-4 # 3e-4
 

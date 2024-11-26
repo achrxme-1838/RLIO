@@ -148,18 +148,64 @@ class RLIODataConverter:
 
         return selected_steps, errors
 
+    # def _sample_for_fixed_num_points(self, path_to_pcd):
+    #     pcd = o3d.io.read_point_cloud(path_to_pcd)
+    #     points = np.asarray(pcd.points)
+
+    #     if points.shape[0] > self.num_points_per_scan:
+    #         indices = np.random.choice(points.shape[0], self.num_points_per_scan, replace=False)
+    #         sampled_points = points[indices]
+    #     else:
+    #         indices = np.random.choice(points.shape[0], self.num_points_per_scan, replace=True)
+    #         sampled_points = points[indices]
+
+    #     # Visualization
+    #     point_cloud = o3d.geometry.PointCloud()
+    #     point_cloud.points = o3d.utility.Vector3dVector(sampled_points)
+    #     o3d.visualization.draw_geometries([point_cloud])
+
+    #     return sampled_points
+
+
     def _sample_for_fixed_num_points(self, path_to_pcd):
         pcd = o3d.io.read_point_cloud(path_to_pcd)
         points = np.asarray(pcd.points)
 
-        if points.shape[0] > self.num_points_per_scan:
-            indices = np.random.choice(points.shape[0], self.num_points_per_scan, replace=False)
-            sampled_points = points[indices]
-        else:
-            indices = np.random.choice(points.shape[0], self.num_points_per_scan, replace=True)
-            sampled_points = points[indices]
+        voxel_size = 0.1
+
+        voxel_indices = np.floor(points / voxel_size).astype(int)
+
+        unique_voxels, inverse_indices = np.unique(voxel_indices, axis=0, return_inverse=True)
+
+        voxel_groups = {tuple(v): [] for v in unique_voxels}
+        for idx, voxel in zip(range(len(points)), voxel_indices):
+            voxel_groups[tuple(voxel)].append(idx)
+
+        sampled_points = []
+        for voxel, indices in voxel_groups.items():
+            sampled_points.append(points[indices[0]])
+
+        sampled_points = np.array(sampled_points)
+
+        if sampled_points.shape[0] < self.num_points_per_scan:
+            additional_points_needed = self.num_points_per_scan - sampled_points.shape[0]
+            additional_indices = np.random.choice(sampled_points.shape[0], additional_points_needed, replace=True)
+            additional_points = sampled_points[additional_indices]
+            sampled_points = np.vstack([sampled_points, additional_points])
+
+        if sampled_points.shape[0] > self.num_points_per_scan:
+            sampled_points = sampled_points[:self.num_points_per_scan]
+
+        # visualize
+        # print(path_to_pcd)
+        # point_cloud = o3d.geometry.PointCloud()
+        # point_cloud.points = o3d.utility.Vector3dVector(sampled_points)
+        # o3d.visualization.draw_geometries([point_cloud])
+
+    
 
         return sampled_points
+    
 
     
     def pointnet_preprocess(self, points):
@@ -174,6 +220,11 @@ class RLIODataConverter:
         points = provider.random_point_dropout(points)
         points[:, :, 0:3] = provider.random_scale_point_cloud(points[:, :, 0:3])
         points[:, :, 0:3] = provider.shift_point_cloud(points[:, :, 0:3])
+
+        # point_cloud = o3d.geometry.PointCloud()
+        # point_cloud.points = o3d.utility.Vector3dVector(points[0])
+        # o3d.visualization.draw_geometries([point_cloud])
+
         points = torch.Tensor(points)  # (#frames, 1024(#points/scan), 3)
         points = points.transpose(2, 1) # (#frames, 3, 1024(#points/scan))
 
