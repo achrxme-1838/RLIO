@@ -21,6 +21,8 @@ def sample_points_from_pcd(path_to_pcd, num_points_per_scan):
         pcd = o3d.io.read_point_cloud(path_to_pcd)
         points = np.asarray(pcd.points)
 
+        # print(points.shape)
+
         if points.shape[0] > num_points_per_scan:
             indices = np.random.choice(points.shape[0], num_points_per_scan, replace=False)
         else:
@@ -312,7 +314,16 @@ class RLIODataConverter:
         restored_path = os.path.join(self.base_path, exp_dir, 'RLIO_1122test', 'Hesai', 'ours', sub_dir)
         poses_txt = os.path.join(restored_path, 'poses.txt')
         poses = np.loadtxt(poses_txt)  # (time, x, y, z, ...)
-        poses_times = poses[:, 0]
+        # poses_times = poses[:, 0]
+
+        if poses.ndim == 1:
+            print("Warning: Poses array is 1-dimensional. Unable to index with 2D slicing.")
+            poses_times = poses 
+        elif poses.ndim == 2:
+            poses_times = poses[:, 0]
+        else:
+            print(f"Warning: Poses array has {poses.ndim} dimensions. Unable to index with 2D slicing.")
+            poses_times = poses
 
         errors_zip = os.path.join(restored_path, 'errors', 'rpe_trans.zip')
 

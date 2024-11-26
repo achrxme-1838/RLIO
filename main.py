@@ -42,9 +42,9 @@ def main():
 	action_dim = 4 # num params to tune
 
 	# Training related
-	max_timesteps = 1000
+	max_timesteps = 5000
 	num_epochs = 4 # 4
-	mini_batch_size = 1024
+	mini_batch_size = 512
 	
 	# TD3
 	discount = 0.99
@@ -60,8 +60,8 @@ def main():
 
 	# (2, 16, 128)
 	num_ids = 2 		# exp01, exp02, ...
-	num_trajs = 8 		# = num actions
-	num_steps = 128 #128		# 64 		# for each traj  -> full batch size = num_ids * num_trajs * num_steps
+	num_trajs = 16 		# = num actions
+	num_steps = 128		 #128		# 64 		# for each traj  -> full batch size = num_ids * num_trajs * num_steps
 
 	learning_rate = 3e-4 # 3e-4
 
@@ -74,10 +74,10 @@ def main():
 		state_dim = wandb.config.state_dim
 		# tau = wandb.config.tau
 		# alpha = wandb.config.alpha
-		# discount = wandb.config.discount
+		discount = wandb.config.discount
 
 		# policy_noise = wandb.config.policy_noise
-		# policy_freq	= wandb.config.policy_freq
+		policy_freq	= wandb.config.policy_freq
 
 		# num_ids = wandb.config.batch_cfg["param1"]		
 		# num_trajs =	wandb.config.batch_cfg["param2"]			
@@ -205,11 +205,11 @@ if __name__ == "__main__":
 				"learning_rate": {"max": 1e-3, "min": 1e-5},
 				"state_dim": {"values": [32, 64, 128]},
 				# "tau": {"max":0.1, "min":0.0001},
-				# "alpha": {"max": 10.0, "min": 0.25},
-				# "discount": {"values": [0.99, 0.975, 0.95]},
+				"alpha": {"max": 5.0, "min": 2.0},
+				"discount": {"values": [0.98, 0.97, 0.96]},
 
 				# "policy_noise": {"values": [0.1, 0.2, 0.3]},
-				# "policy_freq": {"values": [1, 2, 4]},
+				"policy_freq": {"values": [2, 3]},
 
 				# "batch_cfg": {
 				# 	"values": [
@@ -217,7 +217,7 @@ if __name__ == "__main__":
 				# 		{"param1": 1, "param2": 16, "param3": 8},
 				# 		]
 				# 	},
-				"reward_scale" : {"max":10.0, "min":1.0},
+				"reward_scale" : {"max":10.0, "min":5.0},
 			}
 		}
 
