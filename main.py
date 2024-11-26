@@ -65,7 +65,7 @@ def main():
 
 	learning_rate = 3e-4 # 3e-4
 
-	use_val = False
+	use_val = True
 	val_freq = 10 # 5
 	reward_scale = 1.0
 

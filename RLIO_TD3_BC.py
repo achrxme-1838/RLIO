@@ -189,13 +189,19 @@ class RLIO_TD3_BC(object):
 		num_reward_added = 0
 
 		sampled_traj_name_pairs = self.data_converter.random_select_trajectory()
+		sampled_traj_name_pairs = random.sample(sampled_traj_name_pairs, 10)
+
 		for exp_dir, sub_dir in sampled_traj_name_pairs:
 			valid_steps = self.data_converter.get_valid_idices(exp_dir, sub_dir) 
 			last_valid_step = valid_steps[-1]
-			selected_steps = self.data_converter.sample_steps(valid_steps)
+			# selected_steps = self.data_converter.sample_steps(valid_steps)
 
-			points_in_this_traj, _, _ = self.data_converter.fixed_num_sample_points(exp_dir, selected_steps, valid_steps, last_valid_step) 
-			processed_points = self.data_converter.pointnet_preprocess(points_in_this_traj)
+			selected_steps = random.sample(list(valid_steps), 10)
+
+			points_in_this_traj, _, _ = self.data_converter.load_points_from_all_pcd(exp_dir, selected_steps, valid_steps, last_valid_step) 
+			points_in_this_traj_np = points_in_this_traj.cpu().numpy()
+			processed_points = self.data_converter.pointnet_preprocess(points_in_this_traj_np)
+
 			processed_points_tensor = processed_points.to(device).clone().detach()
 
 			# get action for each state
@@ -228,84 +234,6 @@ class RLIO_TD3_BC(object):
 		self.pointnet.train()
 
 		return mean_reward
-
-	# def validation_old(self):
-
-	# 	self.pointnet.eval()
-		
-	# 	num_points = self.data_converter.num_points_per_scan
-		
-	# 	mean_error = 0
-	# 	num_error_added = 0
-
-	# 	sampled_traj_name_pairs = self.data_converter.random_select_trajectory()
-
-	# 	for exp_dir, _ in sampled_traj_name_pairs:
-	# 		frames_path = os.path.join(self.data_converter.base_path, exp_dir,'RLIO_1122test/LiDARs/Hesai')
-	# 		ours_path = os.path.join(self.data_converter.base_path, exp_dir, 'RLIO_1122test', 'Hesai', 'ours')
-
-	# 		# select 10 steps
-	# 		selected_steps = random.sample(range(len(self.data_converter.pcd_name_dict[exp_dir])), 10)
-
-	# 		for t in selected_steps:
-	# 			path_to_pcd = os.path.join(frames_path, self.data_converter.pcd_name_dict[exp_dir][t])
-	# 			pcd = o3d.io.read_point_cloud(path_to_pcd)
-	# 			points = np.asarray(pcd.points)
-
-	# 			if points.shape[0] > num_points:
-	# 				indices = np.random.choice(points.shape[0], num_points, replace=False)
-	# 				sampled_points = points[indices]
-	# 			else:
-	# 				indices = np.random.choice(points.shape[0], num_points, replace=True)
-	# 				sampled_points = points[indices]
-
-	# 			processed_points = self.data_converter.pointnet_preprocess(sampled_points.reshape(1, num_points, 3))
-	# 			processed_points_tensor = processed_points.to(device).clone().detach()
-
-
-	# 			with torch.no_grad():
-
-	# 				state, _ = self.pointnet(processed_points_tensor)
-	# 				pi = self.actor(state)
-	# 			disc_pi = self.discretize_action(pi)
-	# 			disc_pi = disc_pi[0]
-
-	# 			# sub_dir =str(disc_pi[0]) + '_' + str(disc_pi[1]) + '_' + str(disc_pi[2]) + '_' + str(disc_pi[3])
-	# 			sub_dir = f"{disc_pi[0].item():g}_{disc_pi[1].item():.0f}_{disc_pi[2].item():g}_{disc_pi[3].item():g}"
-
-	# 			# Handle diverges
-	# 			status_file = os.path.join(ours_path, sub_dir, 'status.txt')
-	# 			if os.path.exists(status_file):
-	# 				with open(status_file, 'r') as f:
-	# 					content = f.read().strip()
-	# 				if content == "Finished":
-	# 					# print(sub_dir)
-	# 					valid_indices, errors = self.data_converter.preprocess_errors(exp_dir, sub_dir)
-
-	# 					valid_indices = np.array(valid_indices)  # Ensure valid_indices is a numpy array
-	# 					closest_index = np.abs(valid_indices - t).argmin()
-
-	# 					error = errors[closest_index]
-	# 					num_error_added += 1
-	# 				else:
-	# 					# print("Diverged")
-	# 					error = 0
-	# 			else:
-	# 				# print("No status file")
-	# 				error = 0
-
-	# 			mean_error += error
-
-	# 	self.pointnet.train()
-
-	# 	if num_error_added == 0:
-	# 		mean_error = 1
-	# 	else:
-	# 		mean_error /= num_error_added
-	# 	num_error_added = 0
-
-	# 	print(mean_error)
-	# 	return mean_error
 
 
 	def train(self, add_critic_pointnet):
