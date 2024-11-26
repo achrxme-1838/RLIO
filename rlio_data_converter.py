@@ -5,11 +5,16 @@ import random
 import zipfile
 from io import BytesIO
 import open3d as o3d
+# import concurrent.futures
+
+from concurrent.futures import ThreadPoolExecutor
 
 import provider
 import rlio_rollout_stoage
 
 import time
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class RLIODataConverter:
     def __init__(self, rollout_storage: rlio_rollout_stoage.RLIORolloutStorage, 
@@ -28,6 +33,73 @@ class RLIODataConverter:
 
         self.reward_sacle = reward_scale
 
+        self.all_pcds = []
+        self.exp_dirs = []
+
+    # def load_all_pcds(self):
+
+    #     exp_dirs = [d for d in os.listdir(self.base_path) if d.startswith('exp') and os.path.isdir(os.path.join(self.base_path, d))]
+    #     self.exp_dirs = exp_dirs
+    #     print("exp_dirs : ", self.exp_dirs)
+    #     for exp_dir in exp_dirs:
+    #         print("preprocess : ", exp_dir)
+    #         pcd_path = os.path.join(self.base_path, exp_dir, 'RLIO_1122test', 'LiDARs', 'Hesai')
+    #         pcd_names = [f for f in os.listdir(pcd_path) if f.endswith('.pcd')]
+
+    #         points_in_this_exp = []
+
+    #         for pcd_name in pcd_names:
+    #             path_to_pcd = os.path.join(pcd_path, pcd_name)
+    #             sampled_points = self._sample_for_fixed_num_points(path_to_pcd)
+    #             points_in_this_exp.append(sampled_points)
+
+    #         points_in_this_exp_np = np.array(points_in_this_exp)
+    #         points_in_this_exp_tensor = torch.tensor(points_in_this_exp_np, device='cuda', requires_grad=False, dtype=torch.float32)
+
+    #         self.all_pcds.append(points_in_this_exp_tensor)
+
+    def load_all_pcds(self):
+        exp_dirs = [d for d in os.listdir(self.base_path) if d.startswith('exp') and os.path.isdir(os.path.join(self.base_path, d))]
+        self.exp_dirs = exp_dirs
+        print("exp_dirs : ", self.exp_dirs)
+
+        def process_pcd(pcd_name, pcd_path):
+            path_to_pcd = os.path.join(pcd_path, pcd_name)
+            return self._sample_for_fixed_num_points(path_to_pcd)
+
+        for exp_dir in exp_dirs:
+            print("preprocess : ", exp_dir)
+            pcd_path = os.path.join(self.base_path, exp_dir, 'RLIO_1122test', 'LiDARs', 'Hesai')
+            pcd_names = [f for f in os.listdir(pcd_path) if f.endswith('.pcd')]
+
+            points_in_this_exp = []
+
+            with ThreadPoolExecutor() as executor:
+                results = list(executor.map(lambda pcd_name: process_pcd(pcd_name, pcd_path), pcd_names))
+
+            points_in_this_exp.extend(results)
+
+            points_in_this_exp_np = np.array(points_in_this_exp)
+            points_in_this_exp_tensor = torch.tensor(points_in_this_exp_np, device=device, requires_grad=False, dtype=torch.float32)
+
+            self.all_pcds.append(points_in_this_exp_tensor)
+
+    # def _process_pcds_in_exp_dir(self, exp_dir):
+    #     print("preprocess : ", exp_dir)
+    #     pcd_path = os.path.join(self.base_path, exp_dir, 'RLIO_1122test', 'LiDARs', 'Hesai')
+    #     pcd_names = [f for f in os.listdir(pcd_path) if f.endswith('.pcd')]
+        
+    #     points_in_this_exp = []
+    #     for pcd_name in pcd_names:
+    #         path_to_pcd = os.path.join(pcd_path, pcd_name)
+    #         sampled_points = self._sample_for_fixed_num_points(path_to_pcd)
+    #         points_in_this_exp.append(sampled_points)
+
+    #     points_in_this_exp_np = np.array(points_in_this_exp)
+    #     points_in_this_exp_tensor = torch.tensor(points_in_this_exp_np, device=device, requires_grad=False, dtype=torch.float32)
+    #     self.all_pcds.append(points_in_this_exp_tensor)
+
+
     def set_pcd_name_array_for_each_ids(self):
         self.pcd_name_dict = {}
         exp_dirs = [d for d in os.listdir(self.base_path) if d.startswith('exp') and os.path.isdir(os.path.join(self.base_path, d))]
@@ -38,25 +110,6 @@ class RLIODataConverter:
 
             self.pcd_name_dict[exp_dir] = pcd_names
 
-
-    # def random_select_trajectory(self):
-    #     exp_dirs = [d for d in os.listdir(self.base_path) if d.startswith('exp') and os.path.isdir(os.path.join(self.base_path, d))]
-    #     seleced_exp_dirs = random.sample(exp_dirs, self.num_ids)
-
-    #     valid_pairs = []
-
-    #     for exp_dir in seleced_exp_dirs:
-    #         ours_path = os.path.join(self.base_path, exp_dir, 'RLIO_1122test', 'Hesai', 'ours')
-
-    #         if os.path.exists(ours_path):
-    #             sub_dirs = [d for d in os.listdir(ours_path) if os.path.isdir(os.path.join(ours_path, d))]
-    #             selected_sub_dirs = random.sample(sub_dirs, self.num_trajs)
-    #             for sub_dir in selected_sub_dirs:
-
-    #                 poses_dir = os.path.join(ours_path, sub_dir, 'poses.txt')
-    #                 valid_pairs.append((exp_dir, sub_dir))
-
-    #     return valid_pairs
     
     def random_select_trajectory(self):
         exp_dirs = [d for d in os.listdir(self.base_path) if d.startswith('exp') and os.path.isdir(os.path.join(self.base_path, d))]
@@ -133,6 +186,19 @@ class RLIODataConverter:
 
         return selected_steps, errors
     
+    # def _sample_for_fixed_num_points(self, path_to_pcd):
+    #     pcd = o3d.io.read_point_cloud(path_to_pcd)
+    #     points = np.asarray(pcd.points)
+
+    #     if points.shape[0] > self.num_points_per_scan:
+    #         indices = np.random.choice(points.shape[0], self.num_points_per_scan, replace=False)
+    #         sampled_points = points[indices]
+    #     else:
+    #         indices = np.random.choice(points.shape[0], self.num_points_per_scan, replace=True)
+    #         sampled_points = points[indices]
+
+    #     return sampled_points
+
     def _sample_for_fixed_num_points(self, path_to_pcd):
         pcd = o3d.io.read_point_cloud(path_to_pcd)
         points = np.asarray(pcd.points)
@@ -146,60 +212,60 @@ class RLIODataConverter:
 
         return sampled_points
 
-    def fixed_num_sample_points(self, exp_dir, selected_steps, valid_steps, last_valid_step):
-        """
-        To make the number of points fixed, it randomly samples points from each frame.
-        output: 
-            points (#steps, 1024(#points/scan), 3)
-            next_points (#steps, 1024(#points/scan), 3)
-            done (#steps)
-        """
-        frames_path = os.path.join(self.base_path, exp_dir,'RLIO_1122test/LiDARs/Hesai')
+    # def fixed_num_sample_points(self, exp_dir, selected_steps, valid_steps, last_valid_step):
+    #     """
+    #     To make the number of points fixed, it randomly samples points from each frame.
+    #     output: 
+    #         points (#steps, 1024(#points/scan), 3)
+    #         next_points (#steps, 1024(#points/scan), 3)
+    #         done (#steps)
+    #     """
+    #     frames_path = os.path.join(self.base_path, exp_dir,'RLIO_1122test/LiDARs/Hesai')
 
-        points_in_this_traj = []
-        next_points_in_this_traj = []
-        done = []
+    #     points_in_this_traj = []
+    #     next_points_in_this_traj = []
+    #     done = []
 
-        # print(valid_steps.shape) 
-        # alid_indices.shape: # of GT steps, valid_steps[t] -> incex of the real time in the poses.txt (= pcd file index)
+    #     # print(valid_steps.shape) 
+    #     # alid_indices.shape: # of GT steps, valid_steps[t] -> incex of the real time in the poses.txt (= pcd file index)
 
-        for current_step in selected_steps:
+    #     for current_step in selected_steps:
 
-            if current_step != last_valid_step:
+    #         if current_step != last_valid_step:
 
-                idx_of_current_step_in_valid_steps = np.where(valid_steps == current_step)[0][0]
-                next_step = valid_steps[idx_of_current_step_in_valid_steps + 1]
+    #             idx_of_current_step_in_valid_steps = np.where(valid_steps == current_step)[0][0]
+    #             next_step = valid_steps[idx_of_current_step_in_valid_steps + 1]
 
-                path_to_pcd = os.path.join(frames_path, self.pcd_name_dict[exp_dir][current_step])
-                path_to_next_pcd = os.path.join(frames_path, self.pcd_name_dict[exp_dir][next_step])
+    #             path_to_pcd = os.path.join(frames_path, self.pcd_name_dict[exp_dir][current_step])
+    #             path_to_next_pcd = os.path.join(frames_path, self.pcd_name_dict[exp_dir][next_step])
 
-                if os.path.exists(path_to_pcd):
-                    sampled_points = self._sample_for_fixed_num_points(path_to_pcd)
-                    points_in_this_traj.append(sampled_points)
-                else:
-                    print(f"[ERROR] PCD File not found: {path_to_pcd}")
+    #             if os.path.exists(path_to_pcd):
+    #                 sampled_points = self._sample_for_fixed_num_points(path_to_pcd)
+    #                 points_in_this_traj.append(sampled_points)
+    #             else:
+    #                 print(f"[ERROR] PCD File not found: {path_to_pcd}")
 
-                if os.path.exists(path_to_pcd) and os.path.exists(path_to_next_pcd):
-                    next_sampled_points = self._sample_for_fixed_num_points(path_to_next_pcd)
-                    next_points_in_this_traj.append(next_sampled_points)
-                else:
-                    print(f"[ERROR] Next PCD File not found: {path_to_next_pcd}")
+    #             if os.path.exists(path_to_pcd) and os.path.exists(path_to_next_pcd):
+    #                 next_sampled_points = self._sample_for_fixed_num_points(path_to_next_pcd)
+    #                 next_points_in_this_traj.append(next_sampled_points)
+    #             else:
+    #                 print(f"[ERROR] Next PCD File not found: {path_to_next_pcd}")
 
-                done.append(False)
-            else:  # Last state of each trajectory
+    #             done.append(False)
+    #         else:  # Last state of each trajectory
 
-                path_to_pcd = os.path.join(frames_path, self.pcd_name_dict[exp_dir][current_step])
+    #             path_to_pcd = os.path.join(frames_path, self.pcd_name_dict[exp_dir][current_step])
 
-                if os.path.exists(path_to_pcd):
-                    sampled_points = self._sample_for_fixed_num_points(path_to_pcd)
-                    points_in_this_traj.append(sampled_points)
-                else:
-                    print(f"[ERROR] PCD File not found: {path_to_pcd}")
-                sampled_points = np.zeros((self.num_points_per_scan, 3))
-                next_points_in_this_traj.append(sampled_points)
-                done.append(True)
+    #             if os.path.exists(path_to_pcd):
+    #                 sampled_points = self._sample_for_fixed_num_points(path_to_pcd)
+    #                 points_in_this_traj.append(sampled_points)
+    #             else:
+    #                 print(f"[ERROR] PCD File not found: {path_to_pcd}")
+    #             sampled_points = np.zeros((self.num_points_per_scan, 3))
+    #             next_points_in_this_traj.append(sampled_points)
+    #             done.append(True)
 
-        return np.array(points_in_this_traj), np.array(next_points_in_this_traj), np.array(done)  # (#frames, 1024(#points), 3)
+    #     return np.array(points_in_this_traj), np.array(next_points_in_this_traj), np.array(done)  # (#frames, 1024(#points), 3)
     
     def pointnet_preprocess(self, points):
         """
@@ -355,11 +421,39 @@ class RLIODataConverter:
         
         return reward
     
+    def load_points_from_all_pcd(self, exp_dir, selected_steps, valid_steps, last_valid_step):
+        exp_dir_index = self.exp_dirs.index(exp_dir)
+
+        selected_next_steps = []
+        dones = []
+
+        for current_step in selected_steps:
+            if current_step != last_valid_step:
+                idx_of_current_step_in_valid_steps = np.where(valid_steps == current_step)[0][0]
+                next_step = valid_steps[idx_of_current_step_in_valid_steps + 1]
+
+                selected_next_steps.append(next_step)
+                dones.append(False)
+            else:
+
+                selected_next_steps.append(last_valid_step)  # repeat the last step
+                dones.append(True)
+                
+        points_in_this_traj = self.all_pcds[exp_dir_index][selected_steps]
+        points_in_next = self.all_pcds[exp_dir_index][selected_next_steps]
+
+        return points_in_this_traj, points_in_next ,dones
+
+        # print(exp_dir_index)
+
+        # return 
+
+    
     def preprocess_trajectory(self):
         sampled_traj_name_pairs = self.random_select_trajectory()
         for exp_dir, sub_dir in sampled_traj_name_pairs:
 
-            print(exp_dir, sub_dir)
+            # print(exp_dir, sub_dir)
 
             # get a_t
             params = self.sub_dir_to_param(sub_dir) # action parameters
@@ -371,9 +465,14 @@ class RLIODataConverter:
             selected_steps = self.sample_steps(valid_steps)
 
             # get s_t, s_t+1, done (Note: s_t -> s_t+1 is deterministic in this OFF RL formulation)
-            points_in_this_traj, next_points_in_this_traj, done = self.fixed_num_sample_points(exp_dir, selected_steps, valid_steps, last_valid_step)
-            processed_points = self.pointnet_preprocess(points_in_this_traj)
-            processed_next_points = self.pointnet_preprocess(next_points_in_this_traj)
+            # points_in_this_traj, next_points_in_this_traj, done = self.fixed_num_sample_points(exp_dir, selected_steps, valid_steps, last_valid_step)
+            points_in_this_traj, next_points_in_this_traj, done = self.load_points_from_all_pcd(exp_dir, selected_steps, valid_steps, last_valid_step) 
+
+            points_in_this_traj_np = points_in_this_traj.cpu().numpy()
+            next_points_in_this_traj_np = next_points_in_this_traj.cpu().numpy()
+            
+            processed_points = self.pointnet_preprocess(points_in_this_traj_np)
+            processed_next_points = self.pointnet_preprocess(next_points_in_this_traj_np)
 
             # get r_t (no r_t+1) (the goal is minimize current error, and the current error is calculated by the current action)
             rewards = self.get_rewards(exp_dir, sub_dir, selected_steps, valid_steps, last_valid_step)

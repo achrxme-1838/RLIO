@@ -16,7 +16,6 @@ import open3d as o3d
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
 class Actor(nn.Module):
 	"""
 	action range:
@@ -161,6 +160,7 @@ class RLIO_TD3_BC(object):
 																		
 																		reward_scale=reward_scale)
 		
+		self.data_converter.load_all_pcds()
 		self.data_converter.set_pcd_name_array_for_each_ids()
 		
 
