@@ -3,8 +3,8 @@ import torch
 import argparse
 import os
 
-import rl_utils
 import RLIO_TD3_BC
+import RLIO_DDQN_BC
 
 import wandb
 import time
@@ -43,8 +43,8 @@ def main():
 
 	# Training related
 	max_timesteps = 1000
-	num_epochs = 2 # 4
-	mini_batch_size = 64 #256 # 1024 # 256 # 1024 #64 #256 # 64 # 512
+	num_epochs = 4 # 4
+	mini_batch_size = 3 #256 # 1024 # 256 # 1024 #64 #256 # 64 # 512
 
 	# TD3
 	discount = 0.99
@@ -61,7 +61,7 @@ def main():
 	# (2, 16, 128)
 	num_ids = 2 		# exp01, exp02, ...
 	num_trajs = 4 #16 		# = num actions
-	num_steps = 32 # 128 #128		# 64 		# for each traj  -> full batch size = num_ids * num_trajs * num_steps
+	num_steps = 4 #32 # 128 #128		# 64 		# for each traj  -> full batch size = num_ids * num_trajs * num_steps
 
 	learning_rate = 3e-4 # 3e-4
 
@@ -100,11 +100,14 @@ def main():
 		# TD3 + BC
 		"alpha": alpha,
 
-		"learning_rate":learning_rate
+		"learning_rate":learning_rate,
+		"mini_batch_size":mini_batch_size,
 	}
 
 	# Initialize policy
-	policy = RLIO_TD3_BC.RLIO_TD3_BC(**kwargs)
+	# policy = RLIO_TD3_BC.RLIO_TD3_BC(**kwargs)
+	policy = RLIO_DDQN_BC.RLIO_DDQN_BC(**kwargs)
+
 	# policy.init_storage_and_converter(max_batch_size, mini_batch_size, num_epochs, num_trajs, num_points_per_scan)
 	policy.init_storage_and_converter(
 										mini_batch_size=mini_batch_size,
@@ -126,7 +129,8 @@ def main():
 
 		preprocess_stop = time.time()
 
-		mean_reward, mean_actor_loss, mean_critic_loss, mean_target_Q, mean_Q_error = policy.train(add_critic_pointnet)
+		policy.train(it=it)
+		# mean_reward, mean_actor_loss, mean_critic_loss, mean_target_Q, mean_Q_error = policy.train(add_critic_pointnet)
 
 		stop = time.time()
 		preprocess_time = preprocess_stop - start
@@ -135,18 +139,18 @@ def main():
 		total_time = stop - start
 		print(f"it : {it} total_time : {total_time}s, pre_time : {preprocess_time}s, train_time : {train_time}s")
 
-		if use_val and it % val_freq == 0:
-			mean_reward_val = policy.validation()
+		# if use_val and it % val_freq == 0:
+		# 	mean_reward_val = policy.validation()
 
-			print("mean_rew_val : ", mean_reward_val)
+			# print("mean_rew_val : ", mean_reward_val)
 
 		if WANDB:
 			log_wandb(locals())
 
-		if WANDB_SWEEP:
-			score =  (mean_reward_val - mean_reward)/reward_scale
+		# if WANDB_SWEEP:
+		# 	score =  (mean_reward_val - mean_reward)/reward_scale
 
-			log_wandb(locals(), score)
+		# 	log_wandb(locals(), score)
 
 		if save_model and it % save_interval == 0:
 			path = save_path + f"/{it}"

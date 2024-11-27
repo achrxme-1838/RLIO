@@ -3,13 +3,18 @@ import torch.utils.data
 import torch.nn.functional as F
 from pointnet_utils import PointNetEncoder, feature_transform_reguliarzer
 
+
 class PointNet_RLIO(nn.Module):
-    def __init__(self, k=40, normal_channel=True):
+    def __init__(self, normal_channel=True, action_discrete_ranges=None):
         super(PointNet_RLIO, self).__init__()
         if normal_channel:
             channel = 6
         else:
             channel = 3
+
+   
+        k =  sum(tensor.numel() for tensor in action_discrete_ranges.values())
+
         self.feat = PointNetEncoder(global_feat=True, feature_transform=True, channel=channel)
         self.fc1 = nn.Linear(1024, 512)
         self.fc2 = nn.Linear(512, 256)
@@ -20,12 +25,20 @@ class PointNet_RLIO(nn.Module):
         self.relu = nn.ReLU()
 
     def forward(self, x):
+        """
+        Ourput: Q(s, a), feature transform matrix
+        """
+        
         x, trans, trans_feat = self.feat(x)
         x = F.relu(self.bn1(self.fc1(x)))
         x = F.relu(self.bn2(self.dropout(self.fc2(x))))
         x = self.fc3(x)
-        x = F.log_softmax(x, dim=1)
-        return x, trans_feat  # X: global feature, trans_feat: feature transform matrix(auxiliary)
+
+        # x = F.log_softmax(x, dim=1)
+
+        return x, trans_feat  # Note: x = Q(s, a) -> need to be softmaxed in the training loop
+    
+        # return x, trans_feat  # X: global feature, trans_feat: feature transform matrix(auxiliary)
 
 class get_loss(torch.nn.Module):
     def __init__(self, mat_diff_loss_scale=0.001):
