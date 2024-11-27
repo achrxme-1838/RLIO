@@ -86,10 +86,7 @@ class RLIO_DDQN_BC(object):
             flatten_Q_values, _ = self.Q_network(state_new)      # flatten_Q_values: [batch_size, action_class(different for each)*action_dim]
             action_news = []
             soft_log_max_actions =[]   # for the classification (BC)
-
             for i in range(self.action_number):
-                # TODO: action_new: from the current Q-network
-                
                 soft_max_Q_value = F.softmax(flatten_Q_values[:, i*self.action_discrete_ranges[i].shape[0]:(i+1)*self.action_discrete_ranges[i].shape[0]], dim=1)
                 
                 # soft_log_max_Q_value: for the classification (BC)
@@ -102,8 +99,6 @@ class RLIO_DDQN_BC(object):
                 action_new_onehot = action_new_onehot.detach()
                 action_news.append(action_new_onehot)
 
-        # Compute the target value: y = r + discount_factor * Q_target(s', a') * (1 - done)
-        # with torch.no_grad():
             flatten_target_Q_values, _ = self.target_network(state_new)
             target_Q_sum = torch.zeros(self.mini_batch_size, device=device)
             for i in range(self.action_number):
@@ -111,20 +106,19 @@ class RLIO_DDQN_BC(object):
                             * action_news[i]).sum(dim=1)  #[batch_size]
                 
                 target_Q_sum += target_Q
-                
             mean_target_Q = target_Q_sum / self.action_number
+            
+            # Compute the target value: y = r + discount_factor * Q_target(s', a') * (1 - done)
             y = reward + (self.discount * mean_target_Q * not_done)
 
         self.Q_network.train()
 
+         # Resample the action for the classification (BC)
         soft_log_max_actions =[]
-        # Resample the action for the classification (BC)
         flatten_Q_values_for_BC, _ = self.Q_network(state_new) 
         for i in range(self.action_number):
-            # soft_log_max_Q_value: for the classification (BC)
             soft_log_max_Q_value = F.log_softmax(flatten_Q_values_for_BC[:, i*self.action_discrete_ranges[i].shape[0]:(i+1)*self.action_discrete_ranges[i].shape[0]], dim=1)
             soft_log_max_actions.append(soft_log_max_Q_value)
-
 
         # Train the Q-network: Q(s, a) -> y
         flatten_Q_values, _ = self.Q_network(state)
@@ -159,8 +153,7 @@ class RLIO_DDQN_BC(object):
         loss.backward()
         self.optimizer.step()
 
-
-        return loss.item()
+        return reward.mean().item(), loss.item(), DDQN_loss.item(), BC_loss.item(), mean_target_Q.mean().item()
     
 
     def train(self, it):

@@ -9,8 +9,8 @@ import RLIO_DDQN_BC
 import wandb
 import time
 
-WANDB = False
-WANDB_SWEEP = False
+WANDB = True
+WANDB_SWEEP = True
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -113,7 +113,7 @@ def main():
 
 		preprocess_stop = time.time()
 
-		policy.train(it=it)
+		mean_reward, total_loss, DDQN_loss, BC_loss, mean_target_Q = policy.train(it=it)
 		# mean_reward, mean_actor_loss, mean_critic_loss, mean_target_Q, mean_Q_error = policy.train(add_critic_pointnet)
 
 		stop = time.time()
@@ -131,10 +131,10 @@ def main():
 		if WANDB:
 			log_wandb(locals())
 
-		# if WANDB_SWEEP:
-		# 	score =  mean_reward_val - mean_reward
+		if WANDB_SWEEP:
+			score =  mean_reward_val - mean_reward
 
-		# 	log_wandb(locals(), score)
+			log_wandb(locals(), score)
 
 		if save_model and it % save_interval == 0:
 			path = save_path + f"/{it}"
@@ -156,13 +156,20 @@ def log_wandb(locs, score=None):
 	# score =  mean_reward_val - mean_reward
 
 	wandb_dict = {}
+
 	wandb_dict['Loss/mean_reward'] = locs.get("mean_reward", 0.0)
 	wandb_dict['Loss/mean_reward_val'] = locs.get("mean_reward_val", 0.0)
 
-	wandb_dict['Loss/mean_actor_loss'] = locs.get("mean_actor_loss", 0.0)
-	wandb_dict['Loss/mean_critic_loss'] = locs.get("mean_critic_loss", 0.0)	
-	wandb_dict['Loss/mean_target_Q'] = locs.get("mean_target_Q", 0.0)
-	wandb_dict['Loss/mean_Q_error'] = locs.get("mean_Q_error", 0.0)
+
+	wandb_dict['Loss/total_loss'] = locs.get("total_loss", 0.0)
+	wandb_dict['Loss/DDQN_loss'] = locs.get("DDQN_loss", 0.0)
+	wandb_dict['Loss/BC_loss'] = locs.get("BC_loss", 0.0)
+	wandb_dict["Loss/mean_target_Q"] = locs.get("mean_target_Q", 0.0)
+
+	# wandb_dict['Loss/mean_actor_loss'] = locs.get("mean_actor_loss", 0.0)
+	# wandb_dict['Loss/mean_critic_loss'] = locs.get("mean_critic_loss", 0.0)	
+	# wandb_dict['Loss/mean_target_Q'] = locs.get("mean_target_Q", 0.0)
+	# wandb_dict['Loss/mean_Q_error'] = locs.get("mean_Q_error", 0.0)
 
 	wandb_dict['Performance/preprocess_time'] = locs.get("preprocess_time", 0.0)
 	wandb_dict['Performance/train_time'] = locs.get("train_time", 0.0)
