@@ -12,6 +12,7 @@ import time
 WANDB = False
 WANDB_SWEEP = False
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def main():
 	"""
@@ -24,7 +25,7 @@ def main():
 		if WANDB_SWEEP:
 			# run_name = f"lr_{wandb.config.learning_rate}_alpha_{wandb.config.alpha}_noise_{wandb.config.policy_noise}"
 			# run_name = f"lr_{wandb.config.learning_rate:.5f}"
-			run_name = f"lr_{wandb.config.learning_rate:.5f}_state_dim_{wandb.config.state_dim}"
+			run_name = f"lr_{wandb.config.learning_rate:.5f}"
 		else:
 			run_name = "default_run"
 
@@ -37,33 +38,33 @@ def main():
 	save_path = f"/home/lim/rlio_ws/src/rlio/log/{timestamp}"
 	os.makedirs(save_path, exist_ok=True)
 
-
-	state_dim = 64 # Dim Pointnet output
 	action_dim = 4 # num params to tune
+	action_discrete_ranges = {
+		0: torch.tensor([0.2, 0.4, 0.5, 0.6, 0.8, 1.0], device=device),
+		1: torch.tensor([2, 3, 4, 5], device=device),
+		2: torch.tensor([0.2, 0.4, 0.6, 0.8, 1.0], device=device),
+		3: torch.tensor([0.005, 0.001, 0.05, 0.01, 0.1], device=device)
+	}
 
 	# Training related
 	max_timesteps = 1000
-	num_epochs = 4 # 4
-	mini_batch_size = 10 #256 # 1024 # 256 # 1024 #64 #256 # 64 # 512
-
-	# TD3
-	discount = 0.99
-	tau = 0.005               
-	policy_noise = 0.2
-	noise_clip = 0.5        
-	policy_freq = 2 
-	# TD3 + BC
-	alpha = 2.5
+	num_epochs = 2 # 4
 
 	# Batch size related
 	num_points_per_scan = 1024 # 1024 # 256 # 1024 # 512  # 1024
-
 	# (2, 16, 128)
-	num_ids = 2 		# exp01, exp02, ...
-	num_trajs = 4 #16 		# = num actions
-	num_steps = 4 #32 # 128 #128		# 64 		# for each traj  -> full batch size = num_ids * num_trajs * num_steps
-
+	num_ids = 2 				# exp01, exp02, ...
+	num_trajs = 8				# = num actions
+	num_steps = 32		 		# for each traj  -> full batch size = num_ids * num_trajs * num_steps
+	mini_batch_size = 256 		# 256
+	
+	# DDQN
 	learning_rate = 3e-4 # 3e-4
+	update_target_freq = 2
+	discount = 0.99
+
+	# BC
+	alpha = 2.5
 
 	use_val = True
 	val_freq = 5 # 5
@@ -71,41 +72,24 @@ def main():
 
 	if WANDB_SWEEP:
 		learning_rate = wandb.config.learning_rate
-		state_dim = wandb.config.state_dim
-		# tau = wandb.config.tau
 		alpha = wandb.config.alpha
 		discount = wandb.config.discount
-
-		# policy_noise = wandb.config.policy_noise
-		policy_freq	= wandb.config.policy_freq
-
-		# num_ids = wandb.config.batch_cfg["param1"]		
-		# num_trajs =	wandb.config.batch_cfg["param2"]			
-		# num_steps = wandb.config.batch_cfg["param3"]
-
+		update_target_freq = wandb.config.update_target_freq
 		error_sigma = wandb.config.error_sigma
 
-	# add_critic_pointnet = True
-
-
 	kwargs = {
-		"state_dim": state_dim,  # Will be dims of PointNet output
 		"action_dim": action_dim,
 		"discount": discount,
-		"tau": tau,
-		# TD3
-		"policy_noise": policy_noise,
-		"noise_clip": noise_clip,
-		"policy_freq": policy_freq,
-		# TD3 + BC
+		"update_target_freq": update_target_freq,
 		"alpha": alpha,
 
 		"learning_rate":learning_rate,
 		"mini_batch_size":mini_batch_size,
+
+		"action_discrete_ranges": action_discrete_ranges,
 	}
 
 	# Initialize policy
-	# policy = RLIO_TD3_BC.RLIO_TD3_BC(**kwargs)
 	policy = RLIO_DDQN_BC.RLIO_DDQN_BC(**kwargs)
 
 	# policy.init_storage_and_converter(max_batch_size, mini_batch_size, num_epochs, num_trajs, num_points_per_scan)
@@ -189,12 +173,6 @@ def log_wandb(locs, score=None):
 	wandb.log(wandb_dict, step=locs['it'])
 	
 
-def objective(mean_target_Q):
-    # score = config.x**3 + config.y
-	# score = config.mean_target_Q
-	return mean_target_Q
-
-
 if __name__ == "__main__":
 
 	if WANDB:
@@ -207,21 +185,16 @@ if __name__ == "__main__":
 			"metric": {"goal": "maximize", "name": "score"},
 			"parameters": {
 				"learning_rate": {"max": 1e-3, "min": 1e-5},
-				"state_dim": {"values": [32, 64, 128]},
-				# "tau": {"max":0.1, "min":0.0001},
 				"alpha": {"max": 5.0, "min": 1.0},
 				"discount": {"values": [0.99, 0.98, 0.97]},
-
-				# "policy_noise": {"values": [0.1, 0.2, 0.3]},
-				"policy_freq": {"values": [2, 3]},
-
+				"update_target_freq": {"values": [2, 3, 5]},
 				# "batch_cfg": {
 				# 	"values": [
 				# 		{"param1": 4, "param2": 4, "param3": 8},
 				# 		{"param1": 1, "param2": 16, "param3": 8},
 				# 		]
 				# 	},
-				"error_sigma" : {"max":10.0, "min":1.0},
+				"error_sigma" : {"max":1.0, "min":0.1},
 			}
 		}
 

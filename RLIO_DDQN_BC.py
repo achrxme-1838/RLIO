@@ -13,16 +13,14 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class RLIO_DDQN_BC(object):
     def __init__(self,
-                 state_dim,
                  action_dim,
                  discount=0.99,
-                 tau=0.005,
-                 policy_noise=0.2,
-                 noise_clip=0.5,
-                 policy_freq=2,
+                 update_target_freq=2,
                  alpha=2.5,
                  learning_rate=3e-4,
-                 mini_batch_size=64):
+                 mini_batch_size=64,
+                 action_discrete_ranges=None
+                 ):
         self.data_converter = None
         self.rollout_storage = None
 
@@ -30,21 +28,16 @@ class RLIO_DDQN_BC(object):
         self.action_number = action_dim
         self.discount = discount
 
-        self.update_target_frequency = 10
+        self.update_target_frequency = update_target_freq
         self.alpha = alpha
 
         # Discrete action ranges for each action dimension (with possible values for each dimension)
-        self.action_discrete_ranges = {
-            0: torch.tensor([0.2, 0.4, 0.5, 0.6, 0.8, 1.0], device=device),
-            1: torch.tensor([2, 3, 4, 5], device=device),
-            2: torch.tensor([0.2, 0.4, 0.6, 0.8, 1.0], device=device),
-            3: torch.tensor([0.005, 0.001, 0.05, 0.01, 0.1], device=device)
-        }
+        self.action_discrete_ranges = action_discrete_ranges
         # self.action_discrete_ranges = {
         #     0: torch.tensor([0.2, 0.4, 0.5, 0.6, 0.8, 1.0], device=device),
-        #     1: torch.tensor([2, 3, 3, 4, 4, 5], device=device),
-        #     2: torch.tensor([0.2, 0.2, 0.4, 0.6, 0.8, 1.0], device=device),
-        #     3: torch.tensor([0.005, 0.005, 0.001, 0.05, 0.01, 0.1], device=device)
+        #     1: torch.tensor([2, 3, 4, 5], device=device),
+        #     2: torch.tensor([0.2, 0.4, 0.6, 0.8, 1.0], device=device),
+        #     3: torch.tensor([0.005, 0.001, 0.05, 0.01, 0.1], device=device)
         # }
 
         # Initialize Q-network and target network (PointNet-based)
@@ -222,7 +215,8 @@ class RLIO_DDQN_BC(object):
                 selected_actions.append(selected_action_i)
 
             selected_actions_tensor = torch.stack(selected_actions, dim=1)
-            for i in range(self.mini_batch_size):
+
+            for i in range(sample_step_num):
                 # new_sub_dir = f"{selected_actions_tensor[0]:.1f}_{selected_actions_tensor[1]:.0f}_{selected_actions_tensor[2]:.1f}_{selected_actions_tensor[3]:g}"
                 new_sub_dir = f"{selected_actions_tensor[i, 0].item():.1f}_{selected_actions_tensor[i, 1].item():.0f}_{selected_actions_tensor[i, 2].item():.1f}_{selected_actions_tensor[i, 3].item():g}"
                 new_valid_steps = self.data_converter.get_valid_idices(exp_dir, new_sub_dir)
