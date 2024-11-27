@@ -44,7 +44,7 @@ def main():
 	# Training related
 	max_timesteps = 1000
 	num_epochs = 4 # 4
-	mini_batch_size = 3 #256 # 1024 # 256 # 1024 #64 #256 # 64 # 512
+	mini_batch_size = 10 #256 # 1024 # 256 # 1024 #64 #256 # 64 # 512
 
 	# TD3
 	discount = 0.99
@@ -66,8 +66,8 @@ def main():
 	learning_rate = 3e-4 # 3e-4
 
 	use_val = True
-	val_freq = 10 # 5
-	reward_scale = 1.0
+	val_freq = 5 # 5
+	error_sigma = 0.1
 
 	if WANDB_SWEEP:
 		learning_rate = wandb.config.learning_rate
@@ -83,9 +83,9 @@ def main():
 		# num_trajs =	wandb.config.batch_cfg["param2"]			
 		# num_steps = wandb.config.batch_cfg["param3"]
 
-		reward_scale = wandb.config.reward_scale
+		error_sigma = wandb.config.error_sigma
 
-	add_critic_pointnet = True
+	# add_critic_pointnet = True
 
 
 	kwargs = {
@@ -116,7 +116,7 @@ def main():
 										num_trajs=num_trajs,
 										num_steps=num_steps,
 										num_points_per_scan=num_points_per_scan,
-										reward_scale=reward_scale)	
+										error_sigma=error_sigma)	
 
 	mean_reward_val = 0.0
 
@@ -139,16 +139,16 @@ def main():
 		total_time = stop - start
 		print(f"it : {it} total_time : {total_time}s, pre_time : {preprocess_time}s, train_time : {train_time}s")
 
-		# if use_val and it % val_freq == 0:
-		# 	mean_reward_val = policy.validation()
+		if use_val and it % val_freq == 0:
+			mean_reward_val = policy.validation()
 
-			# print("mean_rew_val : ", mean_reward_val)
+			print("mean_rew_val : ", mean_reward_val)
 
 		if WANDB:
 			log_wandb(locals())
 
 		# if WANDB_SWEEP:
-		# 	score =  (mean_reward_val - mean_reward)/reward_scale
+		# 	score =  mean_reward_val - mean_reward
 
 		# 	log_wandb(locals(), score)
 
@@ -221,7 +221,7 @@ if __name__ == "__main__":
 				# 		{"param1": 1, "param2": 16, "param3": 8},
 				# 		]
 				# 	},
-				"reward_scale" : {"max":10.0, "min":1.0},
+				"error_sigma" : {"max":10.0, "min":1.0},
 			}
 		}
 
