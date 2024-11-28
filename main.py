@@ -37,6 +37,8 @@ def main():
 	timestamp = time.strftime("%Y%m%d_%H%M%S")
 	save_path = f"/home/lim/rlio_ws/src/rlio/log/{timestamp}"
 	os.makedirs(save_path, exist_ok=True)
+	
+	defalut_param = [0.5, 3, 0.6, 0.001]
 
 	action_dim = 4 # num params to tune
 	action_discrete_ranges = {
@@ -47,7 +49,7 @@ def main():
 	}
 
 	# Training related
-	max_timesteps = 1000
+	max_timesteps = 2000 # 1000
 	num_epochs = 2 # 4
 
 	# Batch size related
@@ -69,13 +71,15 @@ def main():
 	use_val = True
 	val_freq = 5 # 5
 	error_sigma = 0.1
+	error_scale = 10
 
 	if WANDB_SWEEP:
 		learning_rate = wandb.config.learning_rate
 		alpha = wandb.config.alpha
-		discount = wandb.config.discount
+		# discount = wandb.config.discount
 		update_target_freq = wandb.config.update_target_freq
 		error_sigma = wandb.config.error_sigma
+		error_scale = wandb.config.error_scale
 
 	kwargs = {
 		"action_dim": action_dim,
@@ -87,6 +91,7 @@ def main():
 		"mini_batch_size":mini_batch_size,
 
 		"action_discrete_ranges": action_discrete_ranges,
+		"default_param": defalut_param,
 	}
 
 	# Initialize policy
@@ -103,6 +108,12 @@ def main():
 										error_sigma=error_sigma)	
 
 	mean_reward_val = 0.0
+	mean_default_reward_val = 0.0
+	rew_gain = 0.0
+
+	# mean_rew_gain = 0.0
+	# mean_rew_gain_update_num = 0
+	recent_rew_gains = []
 
 	for it in range(int(max_timesteps)):
 
@@ -113,7 +124,12 @@ def main():
 
 		preprocess_stop = time.time()
 
+		# mean_reward, mean_default_reward_val, total_loss, DDQN_loss, BC_loss, mean_target_Q = policy.train(it=it)
 		mean_reward, total_loss, DDQN_loss, BC_loss, mean_target_Q = policy.train(it=it)
+
+
+		val_vs_train = mean_reward_val - mean_reward
+		# rew_gain = mean_reward - mean_default_reward_val
 		# mean_reward, mean_actor_loss, mean_critic_loss, mean_target_Q, mean_Q_error = policy.train(add_critic_pointnet)
 
 		stop = time.time()
@@ -124,16 +140,25 @@ def main():
 		print(f"it : {it} total_time : {total_time}s, pre_time : {preprocess_time}s, train_time : {train_time}s")
 
 		if use_val and it % val_freq == 0:
-			mean_reward_val = policy.validation()
+			mean_reward_val, mean_default_reward_val = policy.validation()
+			rew_gain = mean_reward_val - mean_default_reward_val
 
-			print("mean_rew_val : ", mean_reward_val)
+			recent_rew_gains.append(rew_gain)
+			if len(recent_rew_gains) > 10:
+				recent_rew_gains.pop(0)
+
+			mean_rew_gain = sum(recent_rew_gains) / len(recent_rew_gains)
+			# mean_rew_gain_update_num += 1
+
+			print("mean_rew_val : ", mean_reward_val, " / mean_default_rew : ", mean_default_reward_val)
 
 		if WANDB:
 			log_wandb(locals())
 
 		if WANDB_SWEEP:
-			score =  mean_reward_val - mean_reward
-
+			# score =  mean_reward_val - mean_reward
+			# score = mean_reward_val - mean_default_reward_val
+			score = mean_rew_gain
 			log_wandb(locals(), score)
 
 		if save_model and it % save_interval == 0:
@@ -166,6 +191,9 @@ def log_wandb(locs, score=None):
 	wandb_dict['Loss/BC_loss'] = locs.get("BC_loss", 0.0)
 	wandb_dict["Loss/mean_target_Q"] = locs.get("mean_target_Q", 0.0)
 
+	wandb_dict["Loss/val_vs_train"] = locs.get("val_vs_train", 0.0)
+	wandb_dict["Loss/rew_gain"] = locs.get("rew_gain", 0.0)
+
 	# wandb_dict['Loss/mean_actor_loss'] = locs.get("mean_actor_loss", 0.0)
 	# wandb_dict['Loss/mean_critic_loss'] = locs.get("mean_critic_loss", 0.0)	
 	# wandb_dict['Loss/mean_target_Q'] = locs.get("mean_target_Q", 0.0)
@@ -193,8 +221,8 @@ if __name__ == "__main__":
 			"parameters": {
 				"learning_rate": {"max": 1e-3, "min": 1e-5},
 				"alpha": {"max": 5.0, "min": 1.0},
-				"discount": {"values": [0.99, 0.98, 0.97]},
-				"update_target_freq": {"values": [2, 3, 5]},
+				# "discount": {"values": [0.99, 0.98, 0.97]},
+				"update_target_freq": {"values": [5]},
 				# "batch_cfg": {
 				# 	"values": [
 				# 		{"param1": 4, "param2": 4, "param3": 8},
@@ -202,6 +230,7 @@ if __name__ == "__main__":
 				# 		]
 				# 	},
 				"error_sigma" : {"max":1.0, "min":0.1},
+				"error_scale" : {"max":100.0, "min":10.0},
 			}
 		}
 

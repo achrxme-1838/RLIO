@@ -19,7 +19,8 @@ class RLIO_DDQN_BC(object):
                  alpha=2.5,
                  learning_rate=3e-4,
                  mini_batch_size=64,
-                 action_discrete_ranges=None
+                 action_discrete_ranges=None,
+                 default_param=None
                  ):
         self.data_converter = None
         self.rollout_storage = None
@@ -39,6 +40,9 @@ class RLIO_DDQN_BC(object):
         #     2: torch.tensor([0.2, 0.4, 0.6, 0.8, 1.0], device=device),
         #     3: torch.tensor([0.005, 0.001, 0.05, 0.01, 0.1], device=device)
         # }
+
+        self.default_param = default_param
+        self.defalut_sub_dir = f"{default_param[0]:.1f}_{default_param[1]:.0f}_{default_param[2]:.1f}_{default_param[3]:g}"
 
         # Initialize Q-network and target network (PointNet-based)
         self.Q_network = pointnet1.PointNet_RLIO(normal_channel=False, action_discrete_ranges=self.action_discrete_ranges).to(device)
@@ -62,7 +66,8 @@ class RLIO_DDQN_BC(object):
             num_trajs=num_trajs,
             num_steps=num_steps,
             num_points_per_scan=num_points_per_scan,
-            error_sigma=error_sigma
+            error_sigma=error_sigma,
+            default_sub_dir=self.defalut_sub_dir
         )
 
         self.data_converter.load_all_pcds()
@@ -158,19 +163,52 @@ class RLIO_DDQN_BC(object):
 
     def train(self, it):
 
+        mean_reward = 0
+        mean_loss = 0
+        mean_DDQN_loss = 0
+        mean_BC_loss = 0
+        mean_target_Q = 0
+        # mean_default_reward = 0
+
+        num_add = 0
+
         generator= self.rollout_storage.mini_batch_generator()
 
+        # for points, next_points, reward, default_reward, actions, dones in generator:
         for points, next_points, reward, actions, dones in generator:
+
             if it % self.update_target_frequency == 0:
                 self.update_target_network()
 
-            loss = self.update_Q_network(points, actions, reward, next_points, dones)
+            reward, loss, DDQN_loss, BC_loss, target_Q = self.update_Q_network(points, actions, reward, next_points, dones)
+
+            mean_reward += reward
+            # mean_default_reward += default_reward.mean().item()
+
+            mean_loss += loss
+            mean_DDQN_loss += DDQN_loss
+            mean_BC_loss += BC_loss
+            mean_target_Q += target_Q
+            
+            num_add += 1
+
+        mean_reward /= num_add
+        # mean_default_reward = mean_default_reward / num_add
+
+        mean_loss /= num_add
+        mean_DDQN_loss /= num_add
+        mean_BC_loss /= num_add
+        mean_target_Q = mean_target_Q / num_add
         
-        return loss
+        # return mean_reward, mean_default_reward, mean_loss, mean_DDQN_loss, mean_BC_loss, mean_target_Q
+        return mean_reward, mean_loss, mean_DDQN_loss, mean_BC_loss, mean_target_Q
+    
     
     def validation(self):
 
         mean_reward = 0
+        mean_default_reward = 0
+
         num_reward_added = 0
         
         sampled_traj_name_pairs = self.data_converter.random_select_trajectory()
@@ -210,20 +248,30 @@ class RLIO_DDQN_BC(object):
             selected_actions_tensor = torch.stack(selected_actions, dim=1)
 
             for i in range(sample_step_num):
+                step = selected_steps[i]
+
                 # new_sub_dir = f"{selected_actions_tensor[0]:.1f}_{selected_actions_tensor[1]:.0f}_{selected_actions_tensor[2]:.1f}_{selected_actions_tensor[3]:g}"
                 new_sub_dir = f"{selected_actions_tensor[i, 0].item():.1f}_{selected_actions_tensor[i, 1].item():.0f}_{selected_actions_tensor[i, 2].item():.1f}_{selected_actions_tensor[i, 3].item():g}"
+
+                # print(new_sub_dir)
+                
                 new_valid_steps = self.data_converter.get_valid_idices(exp_dir, new_sub_dir)
                 new_last_valid_step = new_valid_steps[-1]
-                step = selected_steps[i]
                 reward = self.data_converter._get_reward_for_valid(exp_dir, new_sub_dir, step, new_valid_steps, new_last_valid_step)
 
+                new_default_valid_steps = self.data_converter.get_valid_idices(exp_dir, self.defalut_sub_dir)
+                new_default_last_valid_step = new_default_valid_steps[-1]
+                default_reward = self.data_converter._get_reward_for_valid(exp_dir, self.defalut_sub_dir, step, new_default_valid_steps, new_default_last_valid_step)
+
+                mean_default_reward += default_reward
                 mean_reward += reward
                 num_reward_added += 1
             # print(selected_actions_tensor)
 
         mean_reward /= num_reward_added
+        mean_default_reward /= num_reward_added
 
         self.Q_network.train()
 
-        return mean_reward
+        return mean_reward, mean_default_reward
 

@@ -16,6 +16,8 @@ class RLIORolloutStorage:
         self.points_batch = torch.zeros(self.max_batch_size, 3, self.num_points, dtype=torch.float32, device=self.device, requires_grad=False)
         self.next_points_batch = torch.zeros(self.max_batch_size, 3, self.num_points, dtype=torch.float32, device=self.device, requires_grad=False)
         self.rewards_batch = torch.zeros(self.max_batch_size, dtype=torch.float32, device=self.device, requires_grad=False)
+        # self.default_rewards_batch = torch.zeros(self.max_batch_size, dtype=torch.float32, device=self.device, requires_grad=False)
+        
         self.params_batch = torch.zeros(self.max_batch_size, 4, dtype=torch.float32, device=self.device, requires_grad=False)
         self.dones_batch = torch.zeros(self.max_batch_size, dtype=torch.bool, device=self.device, requires_grad=False)
 
@@ -26,6 +28,8 @@ class RLIORolloutStorage:
         self.next_points_batch = torch.zeros(self.max_batch_size, 3, self.num_points, dtype=torch.float32, device=self.device, requires_grad=False)
         
         self.rewards_batch = torch.zeros(self.max_batch_size, dtype=torch.float32, device=self.device, requires_grad=False)
+        # self.default_rewards_batch = torch.zeros(self.max_batch_size, dtype=torch.float32, device=self.device, requires_grad=False)
+        
         self.params_batch = torch.zeros(self.max_batch_size, 4, dtype=torch.float32, device=self.device, requires_grad=False)
         self.dones_batch = torch.zeros(self.max_batch_size, dtype=torch.bool, device=self.device, requires_grad=False)
 
@@ -44,6 +48,8 @@ class RLIORolloutStorage:
         self.points_batch[self.current_batch_idx:self.current_batch_idx+num_frames] = points
         self.next_points_batch[self.current_batch_idx:self.current_batch_idx+num_frames] = next_points
         self.rewards_batch[self.current_batch_idx:self.current_batch_idx+num_frames] = torch.tensor(rewards)
+        # self.default_rewards_batch[self.current_batch_idx:self.current_batch_idx+num_frames] = torch.tensor(default_rewards)
+
         self.params_batch[self.current_batch_idx:self.current_batch_idx+num_frames] = torch.tensor(params)
         self.dones_batch[self.current_batch_idx:self.current_batch_idx+num_frames] = torch.tensor(dones)
 
@@ -68,7 +74,10 @@ class RLIORolloutStorage:
                 state_batch = self.points_batch[batch_idx].detach()
                 next_state_batch = self.next_points_batch[batch_idx].detach()
                 reward_batch = self.rewards_batch[batch_idx].unsqueeze(1).detach()
+                # default_reward_batch = self.default_rewards_batch[batch_idx].unsqueeze(1).detach()
+
                 actions_batch = self.params_batch[batch_idx].detach()
                 dones_batch = self.dones_batch[batch_idx].unsqueeze(1).detach()
 
                 yield state_batch, next_state_batch, reward_batch, actions_batch, dones_batch
+                # yield state_batch, next_state_batch, reward_batch, default_reward_batch, actions_batch, dones_batch

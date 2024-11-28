@@ -24,7 +24,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class RLIODataConverter:
     def __init__(self, rollout_storage: rlio_rollout_stoage.RLIORolloutStorage, 
-                mini_batch_size, num_epochs, num_ids, num_trajs, num_steps, num_points_per_scan, error_sigma):
+                mini_batch_size, num_epochs, num_ids, num_trajs, num_steps, num_points_per_scan, error_sigma,
+                default_sub_dir):
         self.base_path = "/home/lim/HILTI22" 
         self.num_trajs = num_trajs
         self.num_points_per_scan = num_points_per_scan
@@ -38,6 +39,8 @@ class RLIODataConverter:
         self.time_array_name = 'time.npy'
 
         self.error_sigma = error_sigma
+
+        self.default_sub_dir = default_sub_dir
 
         self.all_pcds = []
         self.exp_dirs = []
@@ -317,7 +320,10 @@ class RLIODataConverter:
                     with zipfile.ZipFile(trans_errors_zip, 'r') as zip_ref:
                         with zip_ref.open(self.error_array_name) as file:
                             error_array = np.load(BytesIO(file.read()))  # print(error_array.shape, valid_steps.shape) -> same : okay
-                            trans_error = error_array[idx_of_current_step_in_valid_steps]
+                            if idx_of_current_step_in_valid_steps < len(error_array):
+                                trans_error = error_array[idx_of_current_step_in_valid_steps]
+                            else:
+                                trans_error = 1000
 
                     # with zipfile.ZipFile(rot_errors_zip, 'r') as zip_ref:
                     #     with zip_ref.open(self.error_array_name) as file:
@@ -326,7 +332,6 @@ class RLIODataConverter:
 
                     # error = trans_error + rot_error
                     error = trans_error
-
 
                     # print(trans_error, rot_error)
                     rewards.append(self.calculate_reward(error))
@@ -439,7 +444,7 @@ class RLIODataConverter:
 
             # get r_t (no r_t+1) (the goal is minimize current error, and the current error is calculated by the current action)
             rewards = self.get_rewards(exp_dir, sub_dir, selected_steps, valid_steps, last_valid_step)
-
+            # default_rewards = self.get_rewards(exp_dir, self.default_sub_dir, selected_steps, valid_steps, last_valid_step)
             self.rollout_storage.add_new_trajs_to_buffer(processed_points, processed_next_points, rewards, params, done)
 
         
