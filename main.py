@@ -9,8 +9,8 @@ import RLIO_DDQN_BC
 import wandb
 import time
 
-WANDB = True
-WANDB_SWEEP = True
+WANDB = False
+WANDB_SWEEP = False
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -49,7 +49,7 @@ def main():
 	}
 
 	# Training related
-	max_timesteps = 2000 # 1000
+	max_timesteps = 5000 # 1000
 	num_epochs = 2 # 4
 
 	# Batch size related
@@ -62,7 +62,7 @@ def main():
 	
 	# DDQN
 	learning_rate = 3e-4 # 3e-4
-	update_target_freq = 2
+	update_target_freq = 5
 	discount = 0.99
 
 	# BC
@@ -77,7 +77,7 @@ def main():
 		learning_rate = wandb.config.learning_rate
 		alpha = wandb.config.alpha
 		# discount = wandb.config.discount
-		update_target_freq = wandb.config.update_target_freq
+		# update_target_freq = wandb.config.update_target_freqs
 		error_sigma = wandb.config.error_sigma
 		error_scale = wandb.config.error_scale
 
@@ -92,6 +92,9 @@ def main():
 
 		"action_discrete_ranges": action_discrete_ranges,
 		"default_param": defalut_param,
+
+		"error_scale": error_scale,
+		"error_sigma": error_sigma,
 	}
 
 	# Initialize policy
@@ -105,7 +108,8 @@ def main():
 										num_trajs=num_trajs,
 										num_steps=num_steps,
 										num_points_per_scan=num_points_per_scan,
-										error_sigma=error_sigma)	
+										# error_sigma=error_sigma,
+										)	
 
 	mean_reward_val = 0.0
 	mean_default_reward_val = 0.0
@@ -219,17 +223,19 @@ if __name__ == "__main__":
 			"method": "random",	 # "random"  # "bayes"
 			"metric": {"goal": "maximize", "name": "score"},
 			"parameters": {
-				"learning_rate": {"max": 1e-3, "min": 1e-5},
-				"alpha": {"max": 5.0, "min": 1.0},
+				# "learning_rate": {"max": 1e-3, "min": 1e-5},
+				"learning_rate": {"max": 1e-3, "min": 3e-5},
+
+				"alpha": {"max": 5.0, "min": 2.0},
 				# "discount": {"values": [0.99, 0.98, 0.97]},
-				"update_target_freq": {"values": [5]},
+				# "update_target_freq": {"values": [5]},
 				# "batch_cfg": {
 				# 	"values": [
 				# 		{"param1": 4, "param2": 4, "param3": 8},
 				# 		{"param1": 1, "param2": 16, "param3": 8},
 				# 		]
 				# 	},
-				"error_sigma" : {"max":1.0, "min":0.1},
+				"error_sigma" : {"max":1.0, "min":0.5},
 				"error_scale" : {"max":100.0, "min":10.0},
 			}
 		}

@@ -24,8 +24,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class RLIODataConverter:
     def __init__(self, rollout_storage: rlio_rollout_stoage.RLIORolloutStorage, 
-                mini_batch_size, num_epochs, num_ids, num_trajs, num_steps, num_points_per_scan, error_sigma,
-                default_sub_dir):
+                mini_batch_size, num_epochs, num_ids, num_trajs, num_steps, num_points_per_scan,
+                default_sub_dir, error_scale=10, error_sigma=0.1):
         self.base_path = "/home/lim/HILTI22" 
         self.num_trajs = num_trajs
         self.num_points_per_scan = num_points_per_scan
@@ -38,9 +38,10 @@ class RLIODataConverter:
         self.error_array_name = 'error_array.npy'
         self.time_array_name = 'time.npy'
 
-        self.error_sigma = error_sigma
-
         self.default_sub_dir = default_sub_dir
+
+        self.error_scale = error_scale
+        self.error_sigma = error_sigma  
 
         self.all_pcds = []
         self.exp_dirs = []
@@ -295,7 +296,7 @@ class RLIODataConverter:
         # print("error : ", 10*error)  # 100 is for the scaling
         # print("error^2 : ", (10*error)**2)
 
-        rew = math.exp(-(10*error)**2 / self.error_sigma)
+        rew = math.exp(-(self.error_scale*error)**2 / self.error_sigma)
 
         return rew
 

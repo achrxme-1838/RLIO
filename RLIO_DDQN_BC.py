@@ -20,7 +20,9 @@ class RLIO_DDQN_BC(object):
                  learning_rate=3e-4,
                  mini_batch_size=64,
                  action_discrete_ranges=None,
-                 default_param=None
+                 default_param=None,
+                 error_scale=10,
+                 error_sigma=0.1
                  ):
         self.data_converter = None
         self.rollout_storage = None
@@ -31,6 +33,8 @@ class RLIO_DDQN_BC(object):
 
         self.update_target_frequency = update_target_freq
         self.alpha = alpha
+        self.error_scale = error_scale
+        self.error_sigma = error_sigma
 
         # Discrete action ranges for each action dimension (with possible values for each dimension)
         self.action_discrete_ranges = action_discrete_ranges
@@ -49,14 +53,14 @@ class RLIO_DDQN_BC(object):
         self.target_network = pointnet1.PointNet_RLIO(normal_channel=False, action_discrete_ranges=self.action_discrete_ranges).to(device)
         self.optimizer = optim.Adam(self.Q_network.parameters(), lr=learning_rate)
 
-    def init_storage_and_converter(self, mini_batch_size, num_epochs, num_ids, num_trajs, num_steps, num_points_per_scan, error_sigma=1.0):
+    def init_storage_and_converter(self, mini_batch_size, num_epochs, num_ids, num_trajs, num_steps, num_points_per_scan):
         self.rollout_storage = rlio_rollout_stoage.RLIORolloutStorage(
             mini_batch_size=mini_batch_size,
             num_epochs=num_epochs,
             num_ids=num_ids,
             num_trajs=num_trajs,
             num_steps=num_steps,
-            num_points_per_scan=num_points_per_scan
+            num_points_per_scan=num_points_per_scan,
         )
         self.data_converter = rlio_data_converter.RLIODataConverter(
             rollout_storage=self.rollout_storage,
@@ -66,8 +70,9 @@ class RLIO_DDQN_BC(object):
             num_trajs=num_trajs,
             num_steps=num_steps,
             num_points_per_scan=num_points_per_scan,
-            error_sigma=error_sigma,
-            default_sub_dir=self.defalut_sub_dir
+            default_sub_dir=self.defalut_sub_dir,
+            error_scale=self.error_scale,
+            error_sigma=self.error_sigma,
         )
 
         self.data_converter.load_all_pcds()
