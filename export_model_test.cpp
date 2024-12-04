@@ -4,13 +4,13 @@
 #include <string>
 #include <filesystem>
 
-std::vector<torch::Tensor> flatten_q_value_to_action(
+std::vector<float> flatten_q_value_to_action(
     const torch::Tensor& flatten_q_value,
     const std::vector<torch::Tensor>& action_discrete_ranges,
     int action_number) {
     
-    std::vector<torch::Tensor> selected_actions;
-    // std::vector<float> selected_actions_float;
+    // std::vector<torch::Tensor> selected_actions;
+    std::vector<float> selected_actions_float;
 
     auto device = flatten_q_value.device(); // Get device of input tensor
 
@@ -26,18 +26,20 @@ std::vector<torch::Tensor> flatten_q_value_to_action(
         action_new_onehot.scatter_(1, max_idx, 1.0);
 
         torch::Tensor selected_action_i = action_range.index_select(0, max_idx.squeeze());
-        // float selected_action_i_float = selected_action_i.item<float>();
+        float selected_action_i_float = selected_action_i.item<float>();
 
-        selected_actions.push_back(selected_action_i);
+        // selected_actions.push_back(selected_action_i);
+        selected_actions_float.push_back(selected_action_i_float);
     }
-
-    return selected_actions;
+    
+    return selected_actions_float;
+    // return selected_actions;
 }
 
-std::vector<torch::Tensor> get_policy_output(   std::vector<torch::jit::IValue> inputs,
-                                                const std::vector<torch::Tensor>& action_discrete_ranges,
-                                                int action_number,
-                                                torch::jit::script::Module model){
+std::vector<float> get_policy_output(   std::vector<torch::jit::IValue> inputs,
+                                        const std::vector<torch::Tensor>& action_discrete_ranges,
+                                        int action_number,
+                                        torch::jit::script::Module model){
 
     at::Tensor flatten_q_value;
 
@@ -49,12 +51,13 @@ std::vector<torch::Tensor> get_policy_output(   std::vector<torch::jit::IValue> 
         std::cerr << "Error during model forward pass: " << e.what() << "\n";
     }
 
-    std::vector<torch::Tensor> selected_actions = flatten_q_value_to_action(flatten_q_value, action_discrete_ranges, action_number);
+    std::vector<float> selected_actions = flatten_q_value_to_action(flatten_q_value, action_discrete_ranges, action_number);
 
     return selected_actions;
 }
 
-int main() {
+torch::jit::script::Module import_model(){
+
     torch::jit::script::Module model;
 
     std::string base_dir = "/home/lim/rlio_ws/exported_models/20241129_103031/4800/";
@@ -76,6 +79,13 @@ int main() {
 
     std::cout << "Model loaded successfully!\n";
 
+    return model;
+}
+
+
+int main() {
+
+    torch::jit::script::Module model = import_model();
 
     auto device = torch::kCPU; // Use CUDA or torch::kCPU depending on your environment
 
@@ -86,39 +96,17 @@ int main() {
         torch::tensor({0.2, 0.4, 0.6, 0.8, 1.0}, device),
         torch::tensor({0.005, 0.001, 0.05, 0.01, 0.1}, device)
     };
-
     int action_number = 4;
-
-
-    // try {
-    //     auto output = model.forward(inputs).toTuple(); // Get the output as a tuple
-    //     flatten_q_value = output->elements()[0].toTensor();
-
-    // } catch (const c10::Error& e) {
-    //     std::cerr << "Error during model forward pass: " << e.what() << "\n";
-    // }
-    
-
-    // std::vector<torch::Tensor> selected_actions = flatten_q_value_to_action(flatten_q_value, action_discrete_ranges, action_number);
-
-    // for (int i = 0; i < selected_actions.size(); ++i) {
-    //     // std::cout << "action idx " << i << ": " << selected_actions[i] << std::endl;
-    //     std::cout << "action idx " << i << ": " << selected_actions[i].item<torch::Tensor>() << std::endl;
-    // }
 
     std::vector<torch::jit::IValue> inputs;
     inputs.push_back(torch::randn({1, 3, 1024})); // Example input shape
 
-    at::Tensor flatten_q_value;
-
-
-    std::vector<torch::Tensor> selected_actions = get_policy_output(inputs, action_discrete_ranges, action_number, model);
+    std::vector<float> selected_actions = get_policy_output(inputs, action_discrete_ranges, action_number, model);
     
     for (int i = 0; i < selected_actions.size(); ++i) {
-        // std::cout << "action idx " << i << ": " << selected_actions[i] << std::endl;
-        std::cout << "action idx " << i << ": " << selected_actions[i].item<float>() << std::endl;
-    }
+        std::cout << "action idx " << i << ": " << selected_actions[i] << std::endl;
 
+    }
 
     return 0;
 }
