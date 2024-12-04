@@ -315,14 +315,19 @@ class RLIODataConverter:
                 rewards.append(0)
             else:
                 idx_of_current_step_in_valid_steps = np.where(valid_steps == current_step)[0][0]
-                # idx_of_next_step_in_valid_steps = idx_of_current_step_in_valid_steps + 1
+                idx_of_next_step_in_valid_steps = idx_of_current_step_in_valid_steps + 1
 
                 if os.path.exists(trans_errors_zip) and os.path.exists(rot_errors_zip):
                     with zipfile.ZipFile(trans_errors_zip, 'r') as zip_ref:
                         with zip_ref.open(self.error_array_name) as file:
                             error_array = np.load(BytesIO(file.read()))  # print(error_array.shape, valid_steps.shape) -> same : okay
-                            if idx_of_current_step_in_valid_steps < len(error_array):
-                                trans_error = error_array[idx_of_current_step_in_valid_steps]
+                            # if idx_of_current_step_in_valid_steps < len(error_array):
+                            #     trans_error = error_array[idx_of_current_step_in_valid_steps]
+                            # else:
+                            #     trans_error = 1000
+
+                            if idx_of_next_step_in_valid_steps < len(error_array):
+                                trans_error = error_array[idx_of_next_step_in_valid_steps]
                             else:
                                 trans_error = 1000
 
@@ -360,6 +365,7 @@ class RLIODataConverter:
             reward = 0
         else:
             idx_of_current_step_in_valid_steps = np.where(valid_steps == current_step)[0]
+            idx_of_next_step_in_valid_steps = idx_of_current_step_in_valid_steps + 1
             
             if len(idx_of_current_step_in_valid_steps) == 0:
                 # When it already diverged
@@ -370,12 +376,23 @@ class RLIODataConverter:
                 with zipfile.ZipFile(trans_errors_zip, 'r') as zip_ref:
                     with zip_ref.open(self.error_array_name) as file:
                         error_array = np.load(BytesIO(file.read()))
-                        trans_error = error_array[idx_of_current_step_in_valid_steps]
+                        if idx_of_next_step_in_valid_steps < len(error_array):
+                            trans_error = error_array[idx_of_next_step_in_valid_steps]
+                        else:
+                            trans_error = 1000
 
-                with zipfile.ZipFile(rot_errors_zip, 'r') as zip_ref:
-                    with zip_ref.open(self.error_array_name) as file:
-                        error_array = np.load(BytesIO(file.read()))
-                        rot_error = error_array[idx_of_current_step_in_valid_steps]
+                        # trans_error = error_array[idx_of_next_step_in_valid_steps]
+
+            # if os.path.exists(trans_errors_zip) and os.path.exists(trans_errors_zip):
+            #     with zipfile.ZipFile(trans_errors_zip, 'r') as zip_ref:
+            #         with zip_ref.open(self.error_array_name) as file:
+            #             error_array = np.load(BytesIO(file.read()))
+            #             trans_error = error_array[idx_of_current_step_in_valid_steps]
+
+                # with zipfile.ZipFile(rot_errors_zip, 'r') as zip_ref:
+                #     with zip_ref.open(self.error_array_name) as file:
+                #         error_array = np.load(BytesIO(file.read()))
+                #         rot_error = error_array[idx_of_current_step_in_valid_steps]
 
                 # error = trans_error + rot_error
                 error = trans_error

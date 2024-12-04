@@ -83,6 +83,9 @@ class RLIO_DDQN_BC(object):
         self.target_network.load_state_dict(self.Q_network.state_dict())
 
     def update_Q_network(self, state, action, reward, state_new, done):
+
+        print(state.shape)
+        
         not_done = ~done.squeeze()
         reward = reward.squeeze()
 
@@ -236,7 +239,6 @@ class RLIO_DDQN_BC(object):
             processed_points_tensor = processed_points.to(device).clone().detach()
             state = processed_points_tensor
             ########
-
             flatten_Q_values, _ = self.Q_network(state)  # [batch_size, action_class(different for each)*action_dim]
             selected_actions = []  # [batch_size, action_dim]
 

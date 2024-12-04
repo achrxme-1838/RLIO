@@ -4,6 +4,42 @@ import torch.nn.functional as F
 from pointnet_utils import PointNetEncoder, feature_transform_reguliarzer
 
 
+# class PointNet_RLIO(nn.Module):
+#     def __init__(self, normal_channel=True, action_discrete_ranges=None):
+#         super(PointNet_RLIO, self).__init__()
+#         if normal_channel:
+#             channel = 6
+#         else:
+#             channel = 3
+
+   
+#         k =  sum(tensor.numel() for tensor in action_discrete_ranges.values())
+
+#         self.feat = PointNetEncoder(global_feat=True, feature_transform=True, channel=channel)
+#         self.fc1 = nn.Linear(1024, 512)
+#         self.fc2 = nn.Linear(512, 256)
+#         self.fc3 = nn.Linear(256, k)
+#         self.dropout = nn.Dropout(p=0.4)
+#         self.bn1 = nn.BatchNorm1d(512)
+#         self.bn2 = nn.BatchNorm1d(256)
+#         self.relu = nn.ReLU()
+
+#     def forward(self, x):
+#         """
+#         Ourput: Q(s, a), feature transform matrix
+#         """
+        
+#         x, trans, trans_feat = self.feat(x)
+#         x = F.relu(self.bn1(self.fc1(x)))
+#         x = F.relu(self.bn2(self.dropout(self.fc2(x))))
+#         x = self.fc3(x)
+
+#         # x = F.log_softmax(x, dim=1)
+
+#         return x, trans_feat  # Note: x = Q(s, a) -> need to be softmaxed in the training loop
+    
+#         # return x, trans_feat  # X: global feature, trans_feat: feature transform matrix(auxiliary)
+
 class PointNet_RLIO(nn.Module):
     def __init__(self, normal_channel=True, action_discrete_ranges=None):
         super(PointNet_RLIO, self).__init__()
@@ -12,8 +48,7 @@ class PointNet_RLIO(nn.Module):
         else:
             channel = 3
 
-   
-        k =  sum(tensor.numel() for tensor in action_discrete_ranges.values())
+        k = sum(tensor.numel() for tensor in action_discrete_ranges.values()) if action_discrete_ranges else 0
 
         self.feat = PointNetEncoder(global_feat=True, feature_transform=True, channel=channel)
         self.fc1 = nn.Linear(1024, 512)
@@ -26,19 +61,13 @@ class PointNet_RLIO(nn.Module):
 
     def forward(self, x):
         """
-        Ourput: Q(s, a), feature transform matrix
+        Output: Q(s, a), feature transform matrix
         """
-        
         x, trans, trans_feat = self.feat(x)
         x = F.relu(self.bn1(self.fc1(x)))
         x = F.relu(self.bn2(self.dropout(self.fc2(x))))
         x = self.fc3(x)
-
-        # x = F.log_softmax(x, dim=1)
-
-        return x, trans_feat  # Note: x = Q(s, a) -> need to be softmaxed in the training loop
-    
-        # return x, trans_feat  # X: global feature, trans_feat: feature transform matrix(auxiliary)
+        return x, trans_feat
 
 class get_loss(torch.nn.Module):
     def __init__(self, mat_diff_loss_scale=0.001):

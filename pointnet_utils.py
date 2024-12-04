@@ -36,10 +36,16 @@ class STN3d(nn.Module):
         x = F.relu(self.bn5(self.fc2(x)))
         x = self.fc3(x)
 
-        iden = Variable(torch.from_numpy(np.array([1, 0, 0, 0, 1, 0, 0, 0, 1]).astype(np.float32))).view(1, 9).repeat(
-            batchsize, 1)
+        # iden = Variable(torch.from_numpy(np.array([1, 0, 0, 0, 1, 0, 0, 0, 1]).astype(np.float32))).view(1, 9).repeat(
+        #     batchsize, 1)
+        # if x.is_cuda:
+        #     iden = iden.cuda()
+
+        iden = torch.tensor([1, 0, 0, 0, 1, 0, 0, 0, 1], dtype=torch.float32).view(1, 9).repeat(batchsize, 1)
+
         if x.is_cuda:
             iden = iden.cuda()
+
         x = x + iden
         x = x.view(-1, 3, 3)
         return x
@@ -65,23 +71,23 @@ class STNkd(nn.Module):
         self.k = k
 
     def forward(self, x):
-        batchsize = x.size()[0]
+        batchsize = x.size(0)
         x = F.relu(self.bn1(self.conv1(x)))
         x = F.relu(self.bn2(self.conv2(x)))
         x = F.relu(self.bn3(self.conv3(x)))
         x = torch.max(x, 2, keepdim=True)[0]
-        x = x.view(-1, 1024)
+        x = x.view(batchsize, -1) 
 
         x = F.relu(self.bn4(self.fc1(x)))
         x = F.relu(self.bn5(self.fc2(x)))
-        x = self.fc3(x)
+        x = self.fc3(x) 
 
-        iden = Variable(torch.from_numpy(np.eye(self.k).flatten().astype(np.float32))).view(1, self.k * self.k).repeat(
-            batchsize, 1)
+        iden = torch.eye(self.k, dtype=torch.float32).flatten().unsqueeze(0).repeat(batchsize, 1)
         if x.is_cuda:
             iden = iden.cuda()
+
         x = x + iden
-        x = x.view(-1, self.k, self.k)
+        x = x.view(batchsize, self.k, self.k)
         return x
 
 
@@ -104,12 +110,18 @@ class PointNetEncoder(nn.Module):
         B, D, N = x.size()
         trans = self.stn(x)
         x = x.transpose(2, 1)
+        
         if D > 3:
             feature = x[:, :, 3:]
             x = x[:, :, :3]
+        else:
+            feature = torch.zeros(B, N, 0, device=x.device, dtype=x.dtype)
+        
         x = torch.bmm(x, trans)
+        
         if D > 3:
             x = torch.cat([x, feature], dim=2)
+        
         x = x.transpose(2, 1)
         x = F.relu(self.bn1(self.conv1(x)))
 
@@ -126,11 +138,13 @@ class PointNetEncoder(nn.Module):
         x = self.bn3(self.conv3(x))
         x = torch.max(x, 2, keepdim=True)[0]
         x = x.view(-1, 1024)
+        
         if self.global_feat:
             return x, trans, trans_feat
         else:
             x = x.view(-1, 1024, 1).repeat(1, 1, N)
             return torch.cat([x, pointfeat], 1), trans, trans_feat
+
 
 
 def feature_transform_reguliarzer(trans):

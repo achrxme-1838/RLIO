@@ -3,16 +3,23 @@ import torch
 import argparse
 import os
 
-import RLIO_TD3_BC
 import RLIO_DDQN_BC
 
 import wandb
 import time
+import copy
 
 WANDB = False
 WANDB_SWEEP = False
 
+EXPORT_POLICY = True
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# def load(policy: RLIO_DDQN_BC.RLIO_DDQN_BC, path):
+# 	loaded_dir = torch.load(path)
+# 	policy.Q_network.load_state_dict(loaded_dir)
+
 
 def main():
 	"""
@@ -32,7 +39,7 @@ def main():
 		wandb.run.name = run_name
 		wandb.run.save()
 
-	save_model = False
+	save_model = True
 	save_interval = 200
 	timestamp = time.strftime("%Y%m%d_%H%M%S")
 	save_path = f"/home/lim/rlio_ws/src/rlio/log/{timestamp}"
@@ -99,6 +106,39 @@ def main():
 
 	# Initialize policy
 	policy = RLIO_DDQN_BC.RLIO_DDQN_BC(**kwargs)
+
+
+	if EXPORT_POLICY:
+		save_root_path = '/home/lim/rlio_ws/exported_models'
+		load_root_path = '/home/lim/rlio_ws/src/rlio/log'
+
+		dir_name = '20241129_103031'
+		check_point = 4800
+
+		# dir_name = '20241203_214100'
+		# check_point = 0
+
+		# Load
+		load_dir = os.path.join(load_root_path, dir_name, str(check_point))
+
+		policy.Q_network.eval()
+		loaded_dict = torch.load(os.path.join(load_dir, 'Q_net.pt'))
+		policy.Q_network.load_state_dict(loaded_dict)
+
+		# Export
+		save_dir = os.path.join(save_root_path, dir_name, str(check_point))
+		os.makedirs(save_dir, exist_ok=True)
+		save_path_pt = os.path.join(save_dir, 'Q_net.pt')
+		model = copy.deepcopy(policy.Q_network).to('cpu')
+
+		traced_script_module = torch.jit.script(model)
+		traced_script_module.save(save_path_pt)
+
+		policy.Q_network.train()
+
+		print("Model exported to : ", save_path_pt)
+
+
 
 	# policy.init_storage_and_converter(max_batch_size, mini_batch_size, num_epochs, num_trajs, num_points_per_scan)
 	policy.init_storage_and_converter(
@@ -169,8 +209,7 @@ def main():
 			path = save_path + f"/{it}"
 			os.makedirs(path, exist_ok=True)
 
-			save(policy.actor, path + "/actor.pt")
-			save(policy.pointnet, path + "/pointnet.pt")
+			save(policy.Q_network, path + "/Q_net.pt")
 
 		start = stop
 
